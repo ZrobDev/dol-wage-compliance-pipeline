@@ -34,6 +34,13 @@ Parked until M1-M4 are done: a second source (BLS QCEW, joined through a ZIP -> 
 - `docs/reference/whd_enforcement_metadata.json`: the WHD enforcement column dictionary (110 variables), from the DOL API.
 - `experiments/e3-airflow-cosmos/`: a one-day experiment that measured Airflow 3 + Cosmos + dbt memory use. See its README before reusing anything.
 
+## Prerequisites
+
+- [uv](https://docs.astral.sh/uv/) (Python 3.13 is pinned in `.python-version`).
+- A free DOL API key from the [DOL Open Data Portal](https://dataportal.dol.gov/).
+- A Snowflake account (Standard edition is enough). Run `infra/snowflake/bootstrap.sql` once as ACCOUNTADMIN: it creates a resource monitor capped at 2 credits a month, an XS warehouse, the `WHD` database (`RAW`, `STAGING`, `MARTS`), the `WHD_PIPELINE` role and a key-pair service user.
+- Runtime variables, injected by a secrets manager: `DOL_API_KEY`, `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (PKCS#8 PEM).
+
 ## Secrets
 
 No secret lives in this repo. Runtime keys are read from a secrets manager at run time; `.env` files are git-ignored.
