@@ -18,6 +18,8 @@ A portfolio data pipeline over DOL Wage and Hour Division enforcement data. This
 
 `uv run pytest` runs offline on synthetic fixtures, no credentials needed; `doppler run -p data-projects -c prd -- uv run pipeline ingest` loads the raw table; `uv run ruff check . && uv run ruff format --check .`.
 
+`doppler run -p data-projects -c prd -- uv run dbt build --project-dir dbt --profiles-dir dbt` builds and tests every model against Snowflake.
+
 ## Memory
 
 - `docs/retro/` — one retro per session, newest first; read the newest before host work.
