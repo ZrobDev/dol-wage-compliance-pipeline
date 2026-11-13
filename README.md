@@ -7,23 +7,26 @@ A data pipeline over the U.S. Department of Labor Wage and Hour Division (WHD) e
 ## Planned architecture
 
 ```
-DOL WHD API (API key, 429 backoff, resumable offset, load_dt watermark) -+  Python ingest (uv, httpx, pytest)
-BLS QCEW CSV (keyless; ZIP -> county crosswalk)                    [M3] -+-> S3 landing -> Snowflake raw
-        dbt: staging (unpivot per-act columns) -> intermediate -> marts
+DOL WHD API (API key, 429 backoff, resumable offset, load_dt watermark)
+  -> Python ingest (uv, httpx, pytest)
+  -> Snowflake raw   (M1: internal stage; M3: S3 landing + storage integration)
+        dbt: staging (unpivot per-act columns) -> marts
              star schema: fct_compliance_actions, dim_industry, dim_state, dim_date
              tests, source freshness, docs site
-        Airflow 3 (LocalExecutor) + Cosmos (LoadMode.DBT_MANIFEST)                [M3]
-        Terraform (AWS + Snowflake), GitHub OIDC                                 [M2]
+        Airflow 3 (LocalExecutor) + Cosmos (LoadMode.DBT_MANIFEST)                [M2]
+        Terraform (AWS + Snowflake), GitHub OIDC, S3 landing                     [M3]
         public_export mart (aggregates only) -> Google Sheet -> Tableau Public   [M4]
 ```
+
+Parked until M1-M4 are done: a second source (BLS QCEW, joined through a ZIP -> county crosswalk).
 
 ## Milestones
 
 | Milestone | Scope |
 |---|---|
 | M1 | Thin slice: one source -> warehouse raw -> 3-5 dbt models with tests and docs -> one chart. Runs locally. |
-| M2 | Terraform and CI. |
-| M3 | Orchestration with Airflow and Cosmos; second source and the join. |
+| M2 | Orchestration with Airflow and Cosmos. |
+| M3 | Terraform, CI and the S3 landing zone. |
 | M4 | Public layer: aggregates-only export, Tableau Public, dbt docs. |
 
 ## What is here now
