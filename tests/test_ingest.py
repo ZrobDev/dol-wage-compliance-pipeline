@@ -126,7 +126,7 @@ def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
             page_size=2,
             page_pause=0,
         )
-    page = tmp_path / "pages" / "whd_full_00000000.json.gz"
+    (page,) = (tmp_path / "pages").glob("whd_full_00000000_*.json.gz")
     first_bytes = page.read_bytes()
     assert result == (2, 3, 3)
     assert not (tmp_path / "whd_checkpoint.json").exists()

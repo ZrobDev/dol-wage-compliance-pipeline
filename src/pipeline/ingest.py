@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -131,8 +132,12 @@ def run(
         pages += 1
         rows_fetched += len(data)
         pages_dir.mkdir(exist_ok=True)
-        page = pages_dir / f"whd_{_tag(since)}_{offset:08d}.json.gz"
-        page.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))
+        # The content hash in the name means a re-fetched identical page keeps its name (COPY's
+        # load history skips it), while changed data gets a new name and always loads.
+        body = gzip.compress(json.dumps(data).encode(), mtime=0)
+        digest = hashlib.sha256(body).hexdigest()[:12]
+        page = pages_dir / f"whd_{_tag(since)}_{offset:08d}_{digest}.json.gz"
+        page.write_bytes(body)
         rows_loaded += load_page(page)
         offset += len(data)
         _write_checkpoint(checkpoint, offset, since)

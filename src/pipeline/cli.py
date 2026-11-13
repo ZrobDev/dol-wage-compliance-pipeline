@@ -38,13 +38,12 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "load":
-        pages = sorted((args.state_dir / "pages").glob("whd_*.json.gz"))
         conn = warehouse.connect()
         try:
-            loaded = warehouse.load_pages(conn, pages, force=False)
+            files, loaded = load_pending(conn, args.state_dir)
         finally:
             conn.close()
-        print(f"files={len(pages)} newly_loaded_rows={loaded}")
+        print(f"files={files} newly_loaded_rows={loaded}")
         return 0
 
     if "DOL_API_KEY" not in os.environ:
@@ -52,28 +51,42 @@ def main(argv=None) -> int:
     conn = warehouse.connect()
     try:
         since = resolve_since(args.state_dir, args.full, lambda: warehouse.watermark(conn))
-        deferred: list[Path] = []
-
-        def defer(page: Path) -> int:
-            deferred.append(page)
-            return 0
-
-        with httpx.Client(timeout=120) as client:
-            pages, fetched, loaded = run(
-                client,
-                api_key=os.environ["DOL_API_KEY"],
-                state_dir=args.state_dir,
-                since=since,
-                load_page=defer if args.defer_load else warehouse.make_loader(conn),
-                page_pause=args.page_pause,
-            )
+        try:
+            with httpx.Client(timeout=120) as client:
+                pages, fetched, loaded = run(
+                    client,
+                    api_key=os.environ["DOL_API_KEY"],
+                    state_dir=args.state_dir,
+                    since=since,
+                    load_page=(lambda page: 0) if args.defer_load else warehouse.make_loader(conn),
+                    page_pause=args.page_pause,
+                )
+        except IngestError as error:
+            print(error, file=sys.stderr)
+            if args.defer_load:  # whatever was fetched before the error still gets loaded
+                _, partial = load_pending(conn, args.state_dir)
+                print(f"loaded {partial} rows fetched before the error", file=sys.stderr)
+            return 2
         if args.defer_load:
-            loaded = warehouse.load_pages(conn, deferred, force=True)
-    except IngestError as error:
-        print(error, file=sys.stderr)
-        return 2
+            # Every page on disk that Snowflake lacks, including pages from an earlier run that
+            # was interrupted, so a resumed --defer-load never leaves fetched pages behind.
+            _, loaded = load_pending(conn, args.state_dir)
     finally:
         conn.close()
 
     print(f"pages={pages} fetched={fetched} loaded={loaded} since={since or 'full'}")
-    return 0 if fetched == loaded else 1
+    # A deferred load can also pick up pages from an earlier interrupted run: loaded >= fetched.
+    return 0 if loaded >= fetched else 1
+
+
+def load_pending(conn, state_dir: Path) -> tuple[int, int]:
+    pages = sorted((state_dir / "pages").glob("whd_*.json.gz"))
+    try:
+        return len(pages), warehouse.load_pages(conn, pages, force=False)
+    except Exception:
+        print(
+            f"Loading failed; the {len(pages)} page files are kept in {state_dir}/pages. "
+            "Fix the cause, then run `pipeline load`.",
+            file=sys.stderr,
+        )
+        raise
