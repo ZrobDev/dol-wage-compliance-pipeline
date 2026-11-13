@@ -1,0 +1,199 @@
+import gzip
+import json
+import logging
+import traceback
+
+import httpx
+import pytest
+
+from pipeline.ingest import IngestError, fetch_page, run
+
+KEY = "TESTKEY-not-real-123"
+
+
+def rows(start, count):
+    return [
+        {"case_id": index, "load_dt": "2026-01-01T00:00:00"}
+        for index in range(start, start + count)
+    ]
+
+
+def client(handler):
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def loader(path):
+    with gzip.open(path, "rt") as page:
+        return len(json.load(page))
+
+
+def test_fetch_page_retries_429():
+    sleeps = []
+    responses = [429, 429, 200]
+
+    def handler(request):
+        status = responses.pop(0)
+        return httpx.Response(status, json={"data": rows(0, 1)})
+
+    with client(handler) as http:
+        assert fetch_page(http, api_key=KEY, offset=0, limit=10, sleep=sleeps.append) == rows(0, 1)
+    assert sleeps == [5.0, 10.0]
+
+
+def test_fetch_page_raises_after_retry_ceiling():
+    sleeps = []
+
+    with (
+        client(lambda request: httpx.Response(429, json={"data": []})) as http,
+        pytest.raises(IngestError),
+    ):
+        fetch_page(http, api_key=KEY, offset=0, limit=10, sleep=sleeps.append, max_retries=2)
+    assert sleeps == [5.0, 10.0]
+
+
+def test_run_resumes_matching_checkpoint_and_ignores_different_since(tmp_path):
+    checkpoint = tmp_path / "whd_checkpoint.json"
+    checkpoint.write_text('{"offset": 20000, "since": null}')
+    offsets = []
+
+    def handler(request):
+        offsets.append(int(request.url.params["offset"]))
+        return httpx.Response(200, json={"data": []})
+
+    with client(handler) as http:
+        run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            page_size=10,
+            page_pause=0,
+        )
+    assert offsets == [20000]
+
+    checkpoint.write_text('{"offset": 20000, "since": "2025-01-01T00:00:00"}')
+    with client(handler) as http:
+        run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            page_size=10,
+            page_pause=0,
+        )
+    assert offsets[-1] == 0
+
+
+def test_run_sends_incremental_filter(tmp_path):
+    seen = {}
+
+    def handler(request):
+        seen.update(request.url.params)
+        return httpx.Response(200, json={"data": []})
+
+    with client(handler) as http:
+        run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since="2026-01-16T13:04:16",
+            load_page=loader,
+            page_pause=0,
+        )
+    assert json.loads(seen["filter_object"]) == {
+        "field": "load_dt",
+        "operator": "gt",
+        "value": "2026-01-16T13:04:16",
+    }
+
+
+def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
+    responses = [rows(0, 2), rows(2, 1)]
+
+    def handler(request):
+        return httpx.Response(200, json={"data": responses.pop(0)})
+
+    with client(handler) as http:
+        result = run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            page_size=2,
+            page_pause=0,
+        )
+    page = tmp_path / "pages" / "whd_full_00000000.json.gz"
+    first_bytes = page.read_bytes()
+    assert result == (2, 3, 3)
+    assert not (tmp_path / "whd_checkpoint.json").exists()
+
+    responses[:] = [rows(0, 2), rows(2, 1)]
+    with client(handler) as http:
+        run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            page_size=2,
+            page_pause=0,
+        )
+    assert page.read_bytes() == first_bytes
+
+
+@pytest.mark.parametrize("second_response, expected", [(500, (1, 2, 2)), (200, (2, 3, 3))])
+def test_run_handles_end_of_data_500_after_full_page(tmp_path, caplog, second_response, expected):
+    calls = []
+
+    def handler(request):
+        calls.append(int(request.url.params["offset"]))
+        if len(calls) == 1:
+            return httpx.Response(200, json={"data": rows(0, 2)})
+        if len(calls) == 2:
+            return httpx.Response(500, json={"data": []})
+        if second_response == 500:
+            return httpx.Response(500, json={"data": []})
+        return httpx.Response(200, json={"data": rows(2, 1)})
+
+    with client(handler) as http:
+        result = run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            sleep=lambda _: None,
+            page_size=2,
+            page_pause=0,
+        )
+    assert result == expected
+    if second_response == 500:
+        assert calls == [0, 2, 2]
+        assert "treating as end of data" in caplog.text
+    else:
+        assert calls == [0, 2, 2]
+
+
+@pytest.mark.parametrize("kind", ["transport", "response"])
+def test_fetch_page_redacts_key_everywhere(caplog, kind):
+    caplog.set_level(logging.DEBUG)
+
+    def handler(request):
+        if kind == "transport":
+            raise httpx.ConnectError(f"failed {request.url}", request=request)
+        return httpx.Response(403, text=f"denied {KEY}", request=request)
+
+    with client(handler) as http, pytest.raises(IngestError) as caught:
+        fetch_page(http, api_key=KEY, offset=0, limit=1)
+    error = caught.value
+    formatted = "".join(traceback.format_exception(error))
+    assert KEY not in str(error)
+    assert KEY not in repr(error)
+    assert KEY not in formatted
+    assert KEY not in caplog.text
+    assert error.__cause__ is None
+    assert error.__suppress_context__ is True
+    assert error.status == (None if kind == "transport" else 403)

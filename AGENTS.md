@@ -16,7 +16,7 @@ A portfolio data pipeline over DOL Wage and Hour Division enforcement data. This
 
 ## Testing
 
-None yet. M1 adds `uv run pytest` and `dbt build`.
+`uv run pytest` runs offline on synthetic fixtures, no credentials needed; `doppler run -p data-projects -c prd -- uv run pipeline ingest` loads the raw table; `uv run ruff check . && uv run ruff format --check .`.
 
 ## Memory
 
