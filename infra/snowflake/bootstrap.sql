@@ -1,6 +1,7 @@
 -- Snowflake bootstrap for dol-wage-compliance-pipeline (M1).
 -- Run once, as ACCOUNTADMIN, in a Snowsight worksheet on account DOL_WAGE ("Run All").
--- Idempotent: every object is CREATE ... IF NOT EXISTS, except the resource monitor (OR REPLACE).
+-- Idempotent: every object is CREATE ... IF NOT EXISTS. The monitor is never replaced, because
+-- replacing it would reset the month's used credits; change its quota with ALTER RESOURCE MONITOR.
 -- No secrets live here. The service user's public key is set afterwards; see the end of the file.
 
 USE ROLE ACCOUNTADMIN;
@@ -13,7 +14,7 @@ SELECT CURRENT_ACCOUNT_NAME() AS must_be_dol_wage;
 -- Cost cap. Standard on AWS us-east-1 is $2.00/credit, so 2 credits is $4/month
 -- (about 2 hours of an XS warehouse). It covers warehouse compute only, not cloud services.
 -- NOTIFY reaches account admins who enabled notifications in Snowsight.
-CREATE OR REPLACE RESOURCE MONITOR WHD_MONTHLY WITH
+CREATE RESOURCE MONITOR IF NOT EXISTS WHD_MONTHLY WITH
   CREDIT_QUOTA = 2
   FREQUENCY = MONTHLY
   START_TIMESTAMP = IMMEDIATELY
@@ -28,7 +29,7 @@ CREATE WAREHOUSE IF NOT EXISTS WHD_WH WITH
   INITIALLY_SUSPENDED = TRUE
   STATEMENT_TIMEOUT_IN_SECONDS = 600
   COMMENT = 'dol-wage-compliance-pipeline: ingest COPY and dbt';
--- Set separately so a rerun re-attaches the replaced monitor.
+-- Set separately so the assignment also holds for a warehouse created before the monitor.
 ALTER WAREHOUSE WHD_WH SET RESOURCE_MONITOR = WHD_MONTHLY;
 
 -- One role for loading and transforming. Granted to SYSADMIN so admins inherit it.
