@@ -4,8 +4,8 @@
 version: 1
 
 denylist:
-  - ".env"
-  - ".env.*"
+  - "**/.env"
+  - "**/.env.*"
   - "**/secrets/**"
   - "**/credentials/**"
   - "**/*_key*"
@@ -15,6 +15,11 @@ denylist:
   - "**/*.pem"
   - ".terraform/**"
   - "*.tfstate*"
+  # Privilege-bearing files: a change to any of these always goes to the owner.
+  - ".github/workflows/**"
+  - "infra/**"
+  - "gate.yaml"
+  - "loop-constraints.md"
 
 # A coherent change here (a mart plus its tests and docs) runs 10-15 files.
 maxFiles: 20

@@ -79,11 +79,10 @@ CREATE USER IF NOT EXISTS WHD_SVC
   COMMENT = 'dol-wage-compliance-pipeline ingest and dbt';
 GRANT ROLE WHD_PIPELINE TO USER WHD_SVC;
 
--- Let the pipeline role measure its own cost (WAREHOUSE_METERING_HISTORY and the other
--- ACCOUNT_USAGE views) and run the cost-guard test on its own monitor. The account-wide
--- monitor WHD_ACCOUNT stays ACCOUNTADMIN-only.
-GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE WHD_PIPELINE;
-GRANT MONITOR, MODIFY ON RESOURCE MONITOR WHD_MONTHLY TO ROLE WHD_PIPELINE;
+-- Let the pipeline role read its own monitor's used credits (SHOW RESOURCE MONITORS), so a
+-- build's cost can be measured as a before/after difference. MONITOR only: MODIFY would let a
+-- leaked service key raise the quota. Changing a quota, or the cost-guard test, is ACCOUNTADMIN.
+GRANT MONITOR ON RESOURCE MONITOR WHD_MONTHLY TO ROLE WHD_PIPELINE;
 
 -- After this script: generate the key pair locally (private key straight into the secrets
 -- manager, never on disk or screen), then set the public key body here:
@@ -94,4 +93,5 @@ GRANT MONITOR, MODIFY ON RESOURCE MONITOR WHD_MONTHLY TO ROLE WHD_PIPELINE;
 -- to the new private key, confirm a connection, then clear the old slot.
 --   ALTER USER WHD_SVC SET RSA_PUBLIC_KEY_2 = '<new public key body>';
 --   ALTER USER WHD_SVC UNSET RSA_PUBLIC_KEY;
--- No network policy yet: the operator's IP is dynamic. One arrives with CI in M3.
+-- Accepted risk (2026-11-12, revisit in M3): no network policy yet, because the operator's IP is
+-- dynamic. A leaked key works from any IP; the account monitor still caps spend at 3 credits.
