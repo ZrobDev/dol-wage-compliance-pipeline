@@ -33,7 +33,8 @@ CREATE WAREHOUSE IF NOT EXISTS WHD_WH WITH
 ALTER WAREHOUSE WHD_WH SET RESOURCE_MONITOR = WHD_MONTHLY;
 
 -- Account-wide ceiling: every warehouse, including the trial's default one used by Snowsight.
--- 3 credits (~$6/month) sits above the pipeline's 2, so the pipeline monitor fires first.
+-- 3 credits (~$6/month) counts every warehouse together: worksheet use also draws it down and
+-- can suspend WHD_WH before the pipeline reaches its own 2 credits. That is the intended ceiling.
 CREATE RESOURCE MONITOR IF NOT EXISTS WHD_ACCOUNT WITH
   CREDIT_QUOTA = 3
   FREQUENCY = MONTHLY
