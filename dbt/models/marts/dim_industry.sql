@@ -15,6 +15,7 @@ descriptions as (
             order by count(*) desc, naics_description asc nulls last
         ) as description_rank
     from cases
+    where naics_description is not null
     group by naics_key, naics_description
 ),
 industry_counts as (

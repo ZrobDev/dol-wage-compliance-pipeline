@@ -87,10 +87,13 @@ models:
         data_tests: [unique, not_null]
       - name: case_id
         description: Enforcement case identifier.
+        data_tests: [not_null]
       - name: act
         description: Lowercase enforcement act code.
+        data_tests: [not_null]
       - name: act_family
         description: Enforcement act family.
+        data_tests: [not_null]
       - name: naics_key
         description: Cleaned NAICS key for the case.
         data_tests:
@@ -143,15 +146,8 @@ models:
         description: Distinct enforcement case count.
         data_tests: [not_null]
       - name: is_suppressed
-        description: True when the cell has fewer than 3 cases; its measures are then NULL.
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [true]
-                quote: false
-              config:
-                where: "cases < 3"
+        description: True when the cell has fewer than 3 cases; its measures are then NULL. Enforced on the values by tests/assert_small_cells_withhold_measures.sql.
+        data_tests: [not_null]
       - name: case_violations
         description: Sum of case-level violations.
       - name: employees_due_back_wages
