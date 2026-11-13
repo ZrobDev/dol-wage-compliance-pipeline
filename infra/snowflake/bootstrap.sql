@@ -5,17 +5,10 @@
 
 USE ROLE ACCOUNTADMIN;
 
--- Guard: refuse any account other than DOL_WAGE. Run All stops at the first error.
-EXECUTE IMMEDIATE $$
-DECLARE
-  wrong_account EXCEPTION (-20001, 'bootstrap.sql runs only on account DOL_WAGE');
-BEGIN
-  IF (CURRENT_ACCOUNT_NAME() <> 'DOL_WAGE') THEN
-    RAISE wrong_account;
-  END IF;
-  RETURN 'account ok: ' || CURRENT_ACCOUNT_NAME();
-END;
-$$;
+-- Check: this must print DOL_WAGE. Stop here if it does not.
+-- (A Snowflake Scripting guard cannot run yet: scripting needs an active warehouse,
+-- and the warehouse is created below. Run from a client, check the account first.)
+SELECT CURRENT_ACCOUNT_NAME() AS must_be_dol_wage;
 
 -- Cost cap. Standard on AWS us-east-1 is $2.00/credit, so 2 credits is $4/month
 -- (about 2 hours of an XS warehouse). It covers warehouse compute only, not cloud services.
