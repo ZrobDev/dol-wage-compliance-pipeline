@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: whd
+    database: WHD
+    schema: RAW
+    tables:
+      - name: whd_enforcement
+        identifier: WHD_ENFORCEMENT
+        description: Raw DOL Wage and Hour Division enforcement API records and load metadata.
+        config:
+          loaded_at_field: loaded_at
+          freshness:
+            warn_after: {count: 120, period: day}
+            error_after: {count: 200, period: day}
+        columns:
+          - name: payload
+            description: One enforcement API record stored as a VARIANT value.
+          - name: source_file
+            description: Name of the source file containing the record.
+          - name: file_row
+            description: Row position of the record within its source file.
+          - name: loaded_at
+            description: Timestamp when the record was loaded into the raw table.
