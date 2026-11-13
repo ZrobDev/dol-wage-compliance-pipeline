@@ -136,7 +136,13 @@ def run(
         # load history skips it), while changed data gets a new name and always loads.
         body = gzip.compress(json.dumps(data).encode(), mtime=0)
         digest = hashlib.sha256(body).hexdigest()[:12]
-        page = pages_dir / f"whd_{_tag(since)}_{offset:08d}_{digest}.json.gz"
+        prefix = f"whd_{_tag(since)}_{offset:08d}_"
+        page = pages_dir / f"{prefix}{digest}.json.gz"
+        # Drop older versions of this page, so a later bulk load can never pick up two versions
+        # of one page in a single COPY, where loaded_at ties and the stale row could win.
+        for stale in pages_dir.glob(f"{prefix}*.json.gz"):
+            if stale != page:
+                stale.unlink()
         page.write_bytes(body)
         rows_loaded += load_page(page)
         offset += len(data)

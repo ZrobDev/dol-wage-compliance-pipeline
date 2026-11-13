@@ -75,7 +75,10 @@ def main(argv=None) -> int:
         conn.close()
 
     print(f"pages={pages} fetched={fetched} loaded={loaded} since={since or 'full'}")
-    # A deferred load can also pick up pages from an earlier interrupted run: loaded >= fetched.
+    if args.defer_load:
+        # load_pending raises if COPY fails. Its row count can sit below or above `fetched`:
+        # COPY skips re-fetched identical pages, and it also loads pages left by earlier runs.
+        return 0
     return 0 if loaded >= fetched else 1
 
 

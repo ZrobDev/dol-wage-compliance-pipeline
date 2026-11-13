@@ -2,7 +2,7 @@ from pipeline import cli, warehouse
 from pipeline.ingest import IngestError
 
 
-def setup_fakes(monkeypatch, tmp_path, loads, *, fail=False):
+def setup_fakes(monkeypatch, tmp_path, loads, *, fail=False, newly_loaded=4):
     monkeypatch.setenv("DOL_API_KEY", "TESTKEY-not-real-123")
     pages = tmp_path / "pages"
     pages.mkdir()
@@ -23,7 +23,7 @@ def setup_fakes(monkeypatch, tmp_path, loads, *, fail=False):
 
     def load_pages(conn, paths, *, force):
         loads.append(([path.name for path in paths], force))
-        return 4
+        return newly_loaded
 
     monkeypatch.setattr(warehouse, "connect", lambda: FakeConn())
     monkeypatch.setattr(warehouse, "watermark", lambda conn: None)
@@ -61,3 +61,10 @@ def test_without_defer_load_pages_load_one_by_one(tmp_path, monkeypatch):
     # The per-page fake loader returns 0 rows, so loaded < fetched and the CLI exits 1.
     assert cli.main(["ingest", "--state-dir", str(tmp_path)]) == 1
     assert loads == []
+
+
+def test_defer_load_succeeds_when_copy_skips_identical_pages(tmp_path, monkeypatch):
+    # A re-fetch of unchanged pages keeps their names, so COPY skips them and loads 0 rows.
+    loads = []
+    setup_fakes(monkeypatch, tmp_path, loads, newly_loaded=0)
+    assert cli.main(["ingest", "--defer-load", "--state-dir", str(tmp_path)]) == 0
