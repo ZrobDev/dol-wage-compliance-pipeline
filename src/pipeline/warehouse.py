@@ -45,7 +45,7 @@ def watermark(conn) -> str | None:
 
 def make_loader(conn) -> Callable[[Path], int]:
     def load_page(path: Path) -> int:
-        absolute_path = path.resolve()
+        absolute_path = path.resolve().as_posix().replace("'", "\\'")
         with conn.cursor() as cursor:
             cursor.execute(
                 f"PUT 'file://{absolute_path}' @WHD.RAW.WHD_STAGE/whd/ "
@@ -56,12 +56,12 @@ def make_loader(conn) -> Callable[[Path], int]:
                 "FROM (SELECT $1, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER "
                 "FROM @WHD.RAW.WHD_STAGE/whd/) "
                 f"FILES = ('{path.name}') "
-                "FILE_FORMAT = (TYPE = JSON STRIP_OUTER_ARRAY = TRUE COMPRESSION = GZIP)"
+                "FILE_FORMAT = (TYPE = JSON STRIP_OUTER_ARRAY = TRUE COMPRESSION = GZIP) "
+                # FORCE: a resumed or repeated page always lands, so loaded == fetched holds.
+                # Raw is append-only; staging keeps the newest row per case_id.
+                "FORCE = TRUE"
             )
-            # An already-loaded file returns one status column and no rows_loaded.
             columns = [column.name.lower() for column in cursor.description]
-            if "rows_loaded" not in columns:
-                return 0
             index = columns.index("rows_loaded")
             return sum(int(row[index]) for row in cursor.fetchall())
 

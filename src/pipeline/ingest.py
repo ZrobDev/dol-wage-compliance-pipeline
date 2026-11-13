@@ -54,9 +54,12 @@ def fetch_page(
             raise _error("WHD API transport error", api_key) from None
         if response.status_code == 200:
             try:
-                return response.json()["data"]
+                data = response.json()["data"]
             except (ValueError, KeyError, TypeError):
+                data = None
+            if not isinstance(data, list):
                 raise _error("WHD API returned an invalid response", api_key, 200) from None
+            return data
         if response.status_code == 429 and attempt < max_retries:
             sleep(min(base_delay * 2**attempt, 900))
             continue
@@ -83,10 +86,12 @@ def resolve_since(state_dir: Path, full: bool, watermark: Callable[[], str | Non
     Otherwise a partial backfill would already have rows, the watermark would turn the
     next run incremental, and every older record past the checkpoint would be skipped.
     """
+    if full:
+        return None
     checkpoint = state_dir / "whd_checkpoint.json"
     if checkpoint.exists():
         return json.loads(checkpoint.read_text()).get("since")
-    return None if full else watermark()
+    return watermark()
 
 
 def run(
@@ -111,39 +116,13 @@ def run(
             offset = saved["offset"]
 
     pages = rows_fetched = rows_loaded = 0
-    previous_was_full = False
     while True:
-        try:
-            data = fetch_page(
-                client,
-                api_key=api_key,
-                offset=offset,
-                limit=page_size,
-                since=since,
-                sleep=sleep,
-            )
-        except IngestError as exc:
-            if not (offset > 0 and previous_was_full and exc.status == 500):
-                raise
-            sleep(5.0)
-            try:
-                data = fetch_page(
-                    client,
-                    api_key=api_key,
-                    offset=offset,
-                    limit=page_size,
-                    since=since,
-                    sleep=sleep,
-                )
-            except IngestError as retry_error:
-                if retry_error.status != 500:
-                    raise
-                # ponytail: a real 500 here truncates the run; raw-vs-fetched counts catch it.
-                LOGGER.warning(
-                    "HTTP 500 at offset %s after a full page; treating as end of data", offset
-                )
-                break
-
+        # A run ends on a short page. Any error, a 500 included, raises and keeps the
+        # checkpoint: the API answers 500 past the end, but a run only gets there when the
+        # row count is an exact multiple of page_size, and a silent stop would hide a fault.
+        data = fetch_page(
+            client, api_key=api_key, offset=offset, limit=page_size, since=since, sleep=sleep
+        )
         if not data:
             break
         pages += 1
@@ -154,8 +133,7 @@ def run(
         rows_loaded += load_page(page)
         offset += len(data)
         _write_checkpoint(checkpoint, offset, since)
-        previous_was_full = len(data) == page_size
-        if not previous_was_full:
+        if len(data) < page_size:
             break
         sleep(page_pause)
 

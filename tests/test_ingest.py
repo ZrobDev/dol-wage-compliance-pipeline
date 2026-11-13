@@ -144,22 +144,17 @@ def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
     assert page.read_bytes() == first_bytes
 
 
-@pytest.mark.parametrize("second_response, expected", [(500, (1, 2, 2)), (200, (2, 3, 3))])
-def test_run_handles_end_of_data_500_after_full_page(tmp_path, caplog, second_response, expected):
+def test_run_raises_on_500_after_a_full_page_and_keeps_the_checkpoint(tmp_path):
     calls = []
 
     def handler(request):
         calls.append(int(request.url.params["offset"]))
         if len(calls) == 1:
             return httpx.Response(200, json={"data": rows(0, 2)})
-        if len(calls) == 2:
-            return httpx.Response(500, json={"data": []})
-        if second_response == 500:
-            return httpx.Response(500, json={"data": []})
-        return httpx.Response(200, json={"data": rows(2, 1)})
+        return httpx.Response(500, json={"data": []})
 
-    with client(handler) as http:
-        result = run(
+    with client(handler) as http, pytest.raises(IngestError) as caught:
+        run(
             http,
             api_key=KEY,
             state_dir=tmp_path,
@@ -169,12 +164,21 @@ def test_run_handles_end_of_data_500_after_full_page(tmp_path, caplog, second_re
             page_size=2,
             page_pause=0,
         )
-    assert result == expected
-    if second_response == 500:
-        assert calls == [0, 2, 2]
-        assert "treating as end of data" in caplog.text
-    else:
-        assert calls == [0, 2, 2]
+    assert caught.value.status == 500
+    assert calls == [0, 2]
+    assert json.loads((tmp_path / "whd_checkpoint.json").read_text()) == {
+        "offset": 2,
+        "since": None,
+    }
+
+
+@pytest.mark.parametrize("body", [{"data": None}, {"data": {}}, {"rows": []}])
+def test_fetch_page_rejects_a_200_without_a_data_list(body):
+    with (
+        client(lambda request: httpx.Response(200, json=body)) as http,
+        pytest.raises(IngestError),
+    ):
+        fetch_page(http, api_key=KEY, offset=0, limit=1)
 
 
 @pytest.mark.parametrize("kind", ["transport", "response"])
@@ -208,3 +212,8 @@ def test_resolve_since_finishes_an_interrupted_run_before_going_incremental(tmp_
 
     (tmp_path / "whd_checkpoint.json").write_text('{"offset": 6000, "since": null}')
     assert resolve_since(tmp_path, full=False, watermark=watermark) is None
+
+    (tmp_path / "whd_checkpoint.json").write_text(
+        '{"offset": 6000, "since": "2026-01-01T00:00:00"}'
+    )
+    assert resolve_since(tmp_path, full=True, watermark=watermark) is None
