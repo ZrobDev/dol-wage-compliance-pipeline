@@ -82,7 +82,7 @@ doppler run -p data-projects -c prd -- uv run dbt build --project-dir dbt --prof
 | update | m1-api-limits.md | Add: full backfill is 370,964 rows; HTTP 502 occurs mid-run and is now retried |
 | new | snowflake-cost-backfill.md | Per-COPY wake-ups cost; bulk load ~0.02–0.05 credits; monitor lags, pipeline role can't read metering |
 
-Status: pending
+Status: applied 2026-11-13
 
 ## Skill feedback
 none

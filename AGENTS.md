@@ -13,6 +13,9 @@ A portfolio data pipeline over DOL Wage and Hour Division enforcement data. This
 - Pin every dependency version, and choose versions at least two weeks old.
 - Work goes in through PRs once the GitHub repo exists.
 - Secrets come from the secrets manager at run time. Never commit a key; never print one.
+- A backfill or any re-pull uses `pipeline ingest --defer-load` (one COPY at the end). A COPY per page wakes the warehouse for its 60-second minimum each time; on the 6-hour backfill that used 0.93 of the 2-credit monthly cap in two hours.
+- A data-quality number written into docs, a test comment or a PR (a share, a count, "100%") comes from a query over the full load. A number measured on partial data says "partial" next to it: the reconcile rate read 100% at 150k rows and 99.27% at 371k.
+- `tests/test_repo_hygiene.py` fails if tool output, local state or a secrets file is tracked. Before committing, read `git status --short` and git-ignore any untracked file you did not write on purpose.
 
 ## Testing
 
