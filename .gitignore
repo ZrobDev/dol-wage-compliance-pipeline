@@ -14,3 +14,5 @@ logs/
 # terraform
 .terraform/
 *.tfstate*
+# ingest checkpoint and page files
+state/

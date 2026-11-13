@@ -1,0 +1,27 @@
+[project]
+name = "dol-wage-compliance-pipeline"
+version = "0.1.0"
+description = "DOL Wage and Hour Division enforcement data: API -> Snowflake -> dbt."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "httpx==0.28.1",
+  "snowflake-connector-python==4.8.1",
+  "dbt-core==1.12.6",
+  "dbt-snowflake==1.12.4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.2.0",
+  "ruff==0.17.3",
+]
+
+[tool.uv]
+# Every resolved version, transitive ones included, is at least two weeks old (AGENTS.md).
+exclude-newer = "2026-10-29T00:00:00Z"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
