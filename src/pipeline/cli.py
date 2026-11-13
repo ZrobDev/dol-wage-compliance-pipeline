@@ -17,7 +17,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     subcommands = parser.add_subparsers(dest="command", required=True)
     ingest = subcommands.add_parser("ingest")
-    ingest.add_argument("--full", action="store_true")
+    ingest.add_argument(
+        "--full",
+        action="store_true",
+        help="ignore the load_dt watermark and pull every record; an interrupted full run "
+        "resumes from its checkpoint (delete state/whd_checkpoint.json to start from zero)",
+    )
     ingest.add_argument("--state-dir", type=Path, default=Path("state"))
     ingest.add_argument("--page-pause", type=float, default=3.0)
     args = parser.parse_args(argv)
