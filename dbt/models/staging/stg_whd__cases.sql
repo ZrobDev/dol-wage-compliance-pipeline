@@ -1,6 +1,6 @@
 with deduplicated as (
     select
-        try_to_number(payload:case_id::string) as case_id,
+        case_id,
         trim(payload:trade_nm::string) as trade_name,
         trim(payload:legal_name::string) as legal_name,
         trim(payload:cty_nm::string) as city,
@@ -26,15 +26,10 @@ with deduplicated as (
         try_to_decimal(payload:bw_atp_amt::string, 18, 2) as back_wages_agreed,
         try_to_number(payload:ee_atp_cnt::string) as employees_due_back_wages,
         try_to_decimal(payload:cmp_assd::string, 18, 2) as cmp_assessed,
-        try_to_timestamp_ntz(payload:load_dt::string) as load_dt,
+        load_dt,
         loaded_at,
-        source_file,
-        file_row
-    from {{ source('whd', 'whd_enforcement') }}
-    qualify row_number() over (
-        partition by case_id
-        order by load_dt desc, loaded_at desc, source_file desc, file_row desc
-    ) = 1
+        source_file
+    from {{ ref('base_whd__enforcement') }}
 )
 
 select

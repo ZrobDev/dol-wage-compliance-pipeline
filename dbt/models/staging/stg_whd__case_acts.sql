@@ -29,18 +29,7 @@
 ] %}
 
 with deduplicated as (
-    select
-        payload,
-        try_to_number(payload:case_id::string) as case_id,
-        try_to_timestamp_ntz(payload:load_dt::string) as load_dt,
-        loaded_at,
-        source_file,
-        file_row
-    from {{ source('whd', 'whd_enforcement') }}
-    qualify row_number() over (
-        partition by case_id
-        order by load_dt desc, loaded_at desc, source_file desc, file_row desc
-    ) = 1
+    select case_id, payload from {{ ref('base_whd__enforcement') }}
 ),
 unpivoted as (
     {% for item in acts %}

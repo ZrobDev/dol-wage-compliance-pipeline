@@ -1,6 +1,20 @@
 version: 2
 
 models:
+  - name: base_whd__enforcement
+    description: One row per case_id, the newest raw version (load_dt, then loaded_at, source_file, file_row; a null load_dt never wins). Both staging models read from here so they always agree on the surviving record. Table, so the dedupe runs once per build.
+    columns:
+      - name: case_id
+        description: WHD case identifier.
+        data_tests: [unique, not_null]
+      - name: payload
+        description: The surviving raw API record.
+      - name: load_dt
+        description: Source load timestamp of the surviving record.
+      - name: loaded_at
+        description: When the record landed in Snowflake.
+      - name: source_file
+        description: Stage file the surviving record came from.
   - name: stg_whd__cases
     description: One current enforcement case per case ID, flattened from the raw API payload.
     columns:
