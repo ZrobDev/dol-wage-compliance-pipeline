@@ -27,9 +27,10 @@ def loader(path):
         return len(json.load(page))
 
 
-def test_fetch_page_retries_429():
+@pytest.mark.parametrize("transient", [429, 502, 503, 504])
+def test_fetch_page_retries_transient_errors(transient):
     sleeps = []
-    responses = [429, 429, 200]
+    responses = [transient, transient, 200]
 
     def handler(request):
         status = responses.pop(0)

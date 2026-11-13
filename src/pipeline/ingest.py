@@ -14,6 +14,7 @@ LOGGER = logging.getLogger(__name__)
 for _name in ("httpx", "httpcore", "urllib3"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 URL = "https://apiprod.dol.gov/v4/get/WHD/enforcement/json"
+RETRYABLE = {429, 502, 503, 504}
 
 
 class IngestError(RuntimeError):
@@ -60,7 +61,9 @@ def fetch_page(
             if not isinstance(data, list):
                 raise _error("WHD API returned an invalid response", api_key, 200) from None
             return data
-        if response.status_code == 429 and attempt < max_retries:
+        # 429 is the rate limit; 502-504 are transient gateway errors. 500 is not retried: the
+        # API answers 500 past the end of the data.
+        if response.status_code in RETRYABLE and attempt < max_retries:
             sleep(min(base_delay * 2**attempt, 900))
             continue
         raise _error(
