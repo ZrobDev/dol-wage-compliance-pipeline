@@ -17,8 +17,8 @@ with deduplicated as (
         try_to_date(payload:findings_start_date::string) as findings_start_date,
         try_to_date(payload:findings_end_date::string) as findings_end_date,
         case
-            -- The exact source domain is checked after the first load.
-            when upper(trim(payload:flsa_repeat_violator::string)) in ('R', 'RV', 'Y', 'YES', 'TRUE', '1') then true
+            -- Measured domain: N/A, R (repeat), W (willful), RW (repeat and willful).
+            when upper(trim(payload:flsa_repeat_violator::string)) in ('R', 'RW') then true
             else false
         end as is_flsa_repeat_violator,
         try_to_number(payload:case_violtn_cnt::string) as case_violations,

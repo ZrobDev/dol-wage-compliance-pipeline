@@ -34,7 +34,7 @@ models:
       - name: findings_end_date
         description: End date of the findings period.
       - name: is_flsa_repeat_violator
-        description: Whether the source flags the case as an FLSA repeat violator.
+        description: Whether the source flags the case as an FLSA repeat violator (source code R or RW; W alone is willful, not repeat).
       - name: case_violations
         description: Total violations recorded for the case.
       - name: employees_violated
