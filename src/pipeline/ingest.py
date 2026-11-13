@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ LOGGER = logging.getLogger(__name__)
 for _name in ("httpx", "httpcore", "urllib3"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 URL = "https://apiprod.dol.gov/v4/get/WHD/enforcement/json"
+RETRYABLE = {429, 502, 503, 504}
 
 
 class IngestError(RuntimeError):
@@ -60,7 +62,9 @@ def fetch_page(
             if not isinstance(data, list):
                 raise _error("WHD API returned an invalid response", api_key, 200) from None
             return data
-        if response.status_code == 429 and attempt < max_retries:
+        # 429 is the rate limit; 502-504 are transient gateway errors. 500 is not retried: the
+        # API answers 500 past the end of the data.
+        if response.status_code in RETRYABLE and attempt < max_retries:
             sleep(min(base_delay * 2**attempt, 900))
             continue
         raise _error(
@@ -128,8 +132,18 @@ def run(
         pages += 1
         rows_fetched += len(data)
         pages_dir.mkdir(exist_ok=True)
-        page = pages_dir / f"whd_{_tag(since)}_{offset:08d}.json.gz"
-        page.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))
+        # The content hash in the name means a re-fetched identical page keeps its name (COPY's
+        # load history skips it), while changed data gets a new name and always loads.
+        body = gzip.compress(json.dumps(data).encode(), mtime=0)
+        digest = hashlib.sha256(body).hexdigest()[:12]
+        prefix = f"whd_{_tag(since)}_{offset:08d}_"
+        page = pages_dir / f"{prefix}{digest}.json.gz"
+        # Drop older versions of this page, so a later bulk load can never pick up two versions
+        # of one page in a single COPY, where loaded_at ties and the stale row could win.
+        for stale in pages_dir.glob(f"{prefix}*.json.gz"):
+            if stale != page:
+                stale.unlink()
+        page.write_bytes(body)
         rows_loaded += load_page(page)
         offset += len(data)
         _write_checkpoint(checkpoint, offset, since)

@@ -27,9 +27,10 @@ def loader(path):
         return len(json.load(page))
 
 
-def test_fetch_page_retries_429():
+@pytest.mark.parametrize("transient", [429, 502, 503, 504])
+def test_fetch_page_retries_transient_errors(transient):
     sleeps = []
-    responses = [429, 429, 200]
+    responses = [transient, transient, 200]
 
     def handler(request):
         status = responses.pop(0)
@@ -125,7 +126,7 @@ def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
             page_size=2,
             page_pause=0,
         )
-    page = tmp_path / "pages" / "whd_full_00000000.json.gz"
+    (page,) = (tmp_path / "pages").glob("whd_full_00000000_*.json.gz")
     first_bytes = page.read_bytes()
     assert result == (2, 3, 3)
     assert not (tmp_path / "whd_checkpoint.json").exists()
@@ -142,6 +143,22 @@ def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
             page_pause=0,
         )
     assert page.read_bytes() == first_bytes
+
+    # Changed data at offset 0 replaces the older version on disk instead of sitting beside it.
+    responses[:] = [rows(0, 1) + rows(5, 1), rows(2, 1)]
+    with client(handler) as http:
+        run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since=None,
+            load_page=loader,
+            page_size=2,
+            page_pause=0,
+        )
+    (newer,) = (tmp_path / "pages").glob("whd_full_00000000_*.json.gz")
+    assert newer != page
+    assert len(list((tmp_path / "pages").glob("whd_full_*.json.gz"))) == 2
 
 
 def test_run_raises_on_500_after_a_full_page_and_keeps_the_checkpoint(tmp_path):
