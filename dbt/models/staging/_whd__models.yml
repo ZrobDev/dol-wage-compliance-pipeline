@@ -1,0 +1,102 @@
+version: 2
+
+models:
+  - name: base_whd__enforcement
+    description: One row per case_id, the newest raw version (load_dt, then loaded_at, source_file, file_row; a null load_dt never wins). Both staging models read from here so they always agree on the surviving record. Table, so the dedupe runs once per build.
+    columns:
+      - name: case_id
+        description: WHD case identifier.
+        data_tests: [unique, not_null]
+      - name: payload
+        description: The surviving raw API record.
+      - name: load_dt
+        description: Source load timestamp of the surviving record.
+      - name: loaded_at
+        description: When the record landed in Snowflake.
+      - name: source_file
+        description: Stage file the surviving record came from.
+  - name: stg_whd__cases
+    description: One current enforcement case per case ID, flattened from the raw API payload.
+    columns:
+      - name: case_id
+        description: Unique enforcement case identifier.
+        data_tests: [unique, not_null]
+      - name: trade_name
+        description: Employer trade name reported by the source.
+      - name: legal_name
+        description: Employer legal name reported by the source.
+      - name: city
+        description: Employer city reported by the source.
+      - name: state_code
+        description: Uppercase employer state or territory code.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: zip_code
+        description: Employer postal code retained as text.
+      - name: naics_code
+        description: Source NAICS code retained as text to preserve leading zeros.
+      - name: naics_key
+        description: Digits-only NAICS code, the join key to dim_industry. UNKNOWN when the source code is null or shorter than two digits.
+        tests:
+          - not_null
+      - name: naics_description
+        description: Source description for the NAICS code.
+      - name: findings_start_date
+        description: Start date of the findings period.
+      - name: findings_end_date
+        description: End date of the findings period.
+      - name: is_flsa_repeat_violator
+        description: Whether the source flags the case as an FLSA repeat violator (source code R or RW; W alone is willful, not repeat).
+      - name: case_violations
+        description: Total violations recorded for the case.
+      - name: employees_violated
+        description: Employees recorded as violated in the case.
+      - name: back_wages_agreed
+        description: Back wages agreed to by the employer.
+      - name: employees_due_back_wages
+        description: Employees due agreed back wages.
+      - name: cmp_assessed
+        description: Civil monetary penalties assessed for the case.
+      - name: load_dt
+        description: Source timestamp for the record version.
+      - name: loaded_at
+        description: Timestamp when the raw record entered Snowflake.
+      - name: source_file
+        description: Source file that supplied the winning record.
+
+  - name: stg_whd__case_acts
+    description: Current enforcement case measures normalized to one row per case and enforcement act.
+    columns:
+      - name: case_act_id
+        description: Unique identifier formed from the case ID and act code.
+        data_tests: [unique, not_null]
+      - name: case_id
+        description: Enforcement case identifier.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_whd__cases')
+                field: case_id
+      - name: act
+        description: Lowercase code for the enforcement act.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [flsa, flsa_cl, flsa_smw14, flsa_smwpw, flsa_smwap, flsa_smwft, flsa_smwl, flsa_smwmg, flsa_smwsl, flsa_hmwkr, sca, dbra, ccpa, ca, pca, h2b, sraw, mspa, h1b, fmla, h2a, osha, h1a, crew, cwhssa, eppa, eev]
+      - name: act_family
+        description: FLSA family label or uppercase act code for other acts.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [FLSA, SCA, DBRA, CCPA, CA, PCA, H2B, SRAW, MSPA, H1B, FMLA, H2A, OSHA, H1A, CREW, CWHSSA, EPPA, EEV]
+      - name: violations
+        description: Violations recorded for the case and act.
+      - name: back_wages_agreed
+        description: Back wages agreed for the case and act when supplied.
+      - name: employees_due_back_wages
+        description: Employees due back wages for the case and act when supplied.
+      - name: cmp_assessed
+        description: Civil monetary penalties assessed for the case and act when supplied.

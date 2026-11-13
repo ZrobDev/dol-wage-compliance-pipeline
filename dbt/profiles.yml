@@ -1,0 +1,14 @@
+whd:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key: "{{ env_var('SNOWFLAKE_PRIVATE_KEY') }}"
+      role: WHD_PIPELINE
+      warehouse: WHD_WH
+      database: WHD
+      schema: STAGING
+      threads: 4
+      query_tag: dbt
