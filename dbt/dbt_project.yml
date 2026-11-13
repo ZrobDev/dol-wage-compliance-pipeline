@@ -3,6 +3,7 @@ profile: whd
 model-paths: ["models"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
+test-paths: ["tests"]
 
 models:
   whd:
@@ -12,3 +13,7 @@ models:
     marts:
       +schema: MARTS
       +materialized: table
+
+seeds:
+  whd:
+    +schema: MARTS

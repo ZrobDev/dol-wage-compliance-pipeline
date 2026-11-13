@@ -1,0 +1,162 @@
+version: 2
+
+seeds:
+  - name: naics_sectors
+    description: 2022 NAICS sector lookup keyed by each two-digit NAICS prefix.
+    config:
+      column_types:
+        naics_2digit: varchar
+    columns:
+      - name: naics_2digit
+        description: Two-digit NAICS prefix retained as text.
+        data_tests: [unique, not_null]
+      - name: sector_code
+        description: Official 2022 NAICS sector code.
+      - name: sector_name
+        description: Official 2022 NAICS sector title.
+  - name: us_states
+    description: United States states, District of Columbia, and territories with Census regions.
+    config:
+      column_types:
+        state_code: varchar
+    columns:
+      - name: state_code
+        description: Two-character state or territory code retained as text.
+        data_tests: [unique, not_null]
+      - name: state_name
+        description: State, district, or territory name.
+      - name: census_region
+        description: Census region or Territory.
+
+models:
+  - name: dim_industry
+    description: "Grain: one row per distinct cleaned NAICS key seen in staging cases. WHD's own 09xxx codes (not valid NAICS) and missing codes map to UNMAPPED; the share is measured by the singular test assert_unmapped_naics_share (warn above 5%) and stated in the README."
+    columns:
+      - name: naics_key
+        description: Digits-only NAICS code, or UNKNOWN when fewer than two digits are available.
+        data_tests: [unique, not_null]
+      - name: sector_code
+        description: Mapped NAICS sector code, or UNMAPPED.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['11', '21', '22', '23', '31-33', '42', '44-45', '48-49', '51', '52', '53', '54', '55', '56', '61', '62', '71', '72', '81', '92', 'UNMAPPED']
+      - name: sector_name
+        description: Official sector name or Unmapped NAICS code.
+      - name: is_mapped
+        description: Whether the cleaned NAICS key maps to a seed sector.
+      - name: naics_description
+        description: Most common raw NAICS description for the cleaned key, with alphabetical tie-break.
+      - name: case_count
+        description: Number of staging cases with the cleaned NAICS key.
+
+  - name: dim_state
+    description: "Grain: one row per state, District of Columbia, or included territory."
+    columns:
+      - name: state_code
+        description: Two-character state or territory code.
+        data_tests: [unique, not_null]
+      - name: state_name
+        description: State, district, or territory name.
+      - name: census_region
+        description: Census region or Territory.
+
+  - name: dim_date
+    description: "Grain: one row per calendar date from 1980-01-01 through 2030-12-31 (some cases concluded after FY2005 have findings periods ending as early as 1984)."
+    columns:
+      - name: date_day
+        description: Calendar date.
+        data_tests: [unique, not_null]
+      - name: calendar_year
+        description: Calendar year.
+      - name: calendar_month
+        description: Calendar month number.
+      - name: calendar_quarter
+        description: Calendar quarter number.
+      - name: federal_fiscal_year
+        description: Federal fiscal year, beginning in October.
+      - name: federal_fiscal_quarter
+        description: Federal fiscal quarter number, with October through December as quarter one.
+
+  - name: fct_compliance_actions
+    description: "Grain: one row per enforcement case and act."
+    columns:
+      - name: case_act_id
+        description: Unique identifier formed from case ID and act.
+        data_tests: [unique, not_null]
+      - name: case_id
+        description: Enforcement case identifier.
+      - name: act
+        description: Lowercase enforcement act code.
+      - name: act_family
+        description: Enforcement act family.
+      - name: naics_key
+        description: Cleaned NAICS key for the case.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_industry')
+                field: naics_key
+      - name: state_code
+        description: State or territory code for the case.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_state')
+                field: state_code
+              config:
+                severity: warn
+      - name: findings_end_date
+        description: End date of the case findings period.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+              config:
+                severity: warn
+      - name: violations
+        description: Violations recorded for the case and act.
+      - name: back_wages_agreed
+        description: Back wages agreed for the case and act.
+      - name: employees_due_back_wages
+        description: Employees due back wages for the case and act.
+      - name: cmp_assessed
+        description: Civil monetary penalties assessed for the case and act.
+
+  - name: agg_industry_state_year
+    description: "Grain: one row per NAICS sector, state code, and federal fiscal year. This public aggregate contains no row-level case data. Small-cell rule: a cell with fewer than 3 cases keeps its case count, is_suppressed is true, and every measure is NULL."
+    columns:
+      - name: sector_code
+        description: NAICS sector code or UNMAPPED.
+        data_tests: [not_null]
+      - name: sector_name
+        description: NAICS sector name.
+      - name: state_code
+        description: State or territory code; UNKNOWN for the few cases with no state in the source.
+        data_tests: [not_null]
+      - name: fiscal_year
+        description: Federal fiscal year of the findings end date.
+        data_tests: [not_null]
+      - name: cases
+        description: Distinct enforcement case count.
+        data_tests: [not_null]
+      - name: is_suppressed
+        description: True when the cell has fewer than 3 cases; its measures are then NULL.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+              config:
+                where: "cases < 3"
+      - name: case_violations
+        description: Sum of case-level violations.
+      - name: employees_due_back_wages
+        description: Sum of employees due back wages.
+      - name: back_wages_agreed
+        description: Sum of agreed back wages.
+      - name: cmp_assessed
+        description: Sum of assessed civil monetary penalties.
