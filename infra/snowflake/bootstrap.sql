@@ -79,6 +79,12 @@ CREATE USER IF NOT EXISTS WHD_SVC
   COMMENT = 'dol-wage-compliance-pipeline ingest and dbt';
 GRANT ROLE WHD_PIPELINE TO USER WHD_SVC;
 
+-- Let the pipeline role measure its own cost (WAREHOUSE_METERING_HISTORY and the other
+-- ACCOUNT_USAGE views) and run the cost-guard test on its own monitor. The account-wide
+-- monitor WHD_ACCOUNT stays ACCOUNTADMIN-only.
+GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE WHD_PIPELINE;
+GRANT MONITOR, MODIFY ON RESOURCE MONITOR WHD_MONTHLY TO ROLE WHD_PIPELINE;
+
 -- After this script: generate the key pair locally (private key straight into the secrets
 -- manager, never on disk or screen), then set the public key body here:
 --   ALTER USER WHD_SVC SET RSA_PUBLIC_KEY = '<public key body, no BEGIN/END lines>';

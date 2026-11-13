@@ -1,0 +1,28 @@
+# Path gate for delegated and autonomous work in this repo (read by the loop-constraints
+# skill and by finish-feature before every push). A hit, or more files than maxFiles,
+# stops the push and goes to the owner.
+version: 1
+
+denylist:
+  - ".env"
+  - ".env.*"
+  - "**/secrets/**"
+  - "**/credentials/**"
+  - "**/*_key*"
+  - "**/*_secret*"
+  - "state/**"            # local ingest checkpoint and API pages: never committed
+  - "**/*.p8"
+  - "**/*.pem"
+  - ".terraform/**"
+  - "*.tfstate*"
+
+# A coherent change here (a mart plus its tests and docs) runs 10-15 files.
+maxFiles: 20
+
+lanes:
+  # The OpenCode Go subscription is closed (2026-11-12): every opencode-go hop fails.
+  forbid:
+    - opencode-go/glm-5.3
+    - opencode-go/glm-5.2
+    - opencode-go/deepseek-v4-flash
+    - opencode-go/gpt-5.6-luna
