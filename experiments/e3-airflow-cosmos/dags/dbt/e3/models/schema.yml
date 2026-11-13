@@ -1,0 +1,10 @@
+version: 2
+models:
+  - name: stg_cases
+    columns:
+      - name: case_id
+        data_tests: [unique, not_null]
+  - name: fct_sector_wages
+    columns:
+      - name: naics_sector
+        data_tests: [unique, not_null]

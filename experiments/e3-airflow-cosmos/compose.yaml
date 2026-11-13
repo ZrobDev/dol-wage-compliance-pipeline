@@ -1,0 +1,42 @@
+# E3 throwaway only: default creds, nothing listens beyond 127.0.0.1, CT destroyed same day.
+# M3 uses Compose secrets (POSTGRES_PASSWORD_FILE, AIRFLOW__*_CMD).
+x-airflow: &airflow
+  image: e3-airflow:local
+  build: .
+  user: "50000:0"
+  environment: &env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: "4"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: e3_throwaway_jwt
+    AIRFLOW__API_AUTH__JWT_ISSUER: airflow
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+  depends_on:
+    postgres: {condition: service_healthy}
+services:
+  postgres:
+    image: postgres:16
+    environment: {POSTGRES_USER: airflow, POSTGRES_PASSWORD: airflow, POSTGRES_DB: airflow}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD", "pg_isready", "-U", "airflow"], interval: 10s, retries: 5}
+  airflow-init:
+    <<: *airflow
+    command: db migrate
+    entrypoint: ["airflow"]
+  airflow-apiserver:
+    <<: *airflow
+    command: api-server
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on: &after_init
+      airflow-init: {condition: service_completed_successfully}
+  airflow-scheduler: {<<: *airflow, command: scheduler, depends_on: *after_init}
+  airflow-dag-processor: {<<: *airflow, command: dag-processor, depends_on: *after_init}
+  airflow-triggerer: {<<: *airflow, command: triggerer, depends_on: *after_init}
+volumes: {pgdata: {}}

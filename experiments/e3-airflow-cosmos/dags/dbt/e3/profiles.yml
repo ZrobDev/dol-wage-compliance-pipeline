@@ -1,0 +1,4 @@
+e3:
+  target: dev
+  outputs:
+    dev: {type: duckdb, path: /opt/airflow/dags/dbt/e3/e3.duckdb, threads: 1}
