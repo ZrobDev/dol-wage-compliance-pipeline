@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+.envrc
+*.pem
+*.p8
 .venv/
 __pycache__/
 *.pyc
