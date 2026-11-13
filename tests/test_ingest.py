@@ -217,3 +217,7 @@ def test_resolve_since_finishes_an_interrupted_run_before_going_incremental(tmp_
         '{"offset": 6000, "since": "2026-01-01T00:00:00"}'
     )
     assert resolve_since(tmp_path, full=True, watermark=watermark) is None
+
+
+def test_ci_canary_must_fail():
+    assert False, "deliberate: proves CI goes red"
