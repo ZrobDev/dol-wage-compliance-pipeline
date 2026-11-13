@@ -4,7 +4,7 @@ with deduplicated as (
         trim(payload:trade_nm::string) as trade_name,
         trim(payload:legal_name::string) as legal_name,
         trim(payload:cty_nm::string) as city,
-        upper(trim(payload:st_cd::string)) as state_code,
+        nullif(upper(trim(payload:st_cd::string)), '') as state_code,
         trim(payload:zip_cd::string) as zip_code,
         trim(payload:naic_cd::string) as naics_code,
         -- Digits only; null, empty or one-digit codes become UNKNOWN.
