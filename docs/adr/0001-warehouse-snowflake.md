@@ -18,5 +18,5 @@ The pipeline needs a SQL warehouse that dbt targets well. It should also be the 
 ## Consequences
 
 - One full `dbt build` costs a fraction of a credit (measured in the README), so the cap leaves room for dozens of builds a month.
-- Raw is append-only. The loader uses `COPY ... FORCE = TRUE`, so a resumed or repeated page always lands and the fetched and loaded counts always match. Staging keeps the newest row per case.
+- Raw is append-only. The per-page loader uses `COPY ... FORCE = TRUE`, so a resumed or repeated page always lands. The bulk load (`--defer-load`, `pipeline load`) uses COPY's load history instead: an identical page keeps its content-hashed name and is skipped, and changed data gets a new name and loads. Staging keeps the newest row per case.
 - A leaked service key works from any IP until M3 adds a network policy. The key-rotation steps are documented in `infra/snowflake/bootstrap.sql`.

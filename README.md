@@ -11,11 +11,11 @@ A data pipeline over the U.S. Department of Labor Wage and Hour Division (WHD) e
 
 ```
 DOL WHD API  (key in the query string, 6 MB response cap, ~10 requests per 15 min)
-  -> pipeline ingest   Python + httpx: 1,500-row pages, 429/5xx backoff, resumable checkpoint,
+  -> pipeline ingest   Python + httpx: 1,500-row pages, backoff on 429, 502, 503 and 504, resumable checkpoint,
                        load_dt watermark, key redaction; --defer-load for backfills
   -> Snowflake RAW     internal stage, PUT + COPY into one VARIANT column (append-only)
   -> dbt staging       base_whd__enforcement (newest version per case)
-                       stg_whd__cases, stg_whd__case_acts (28 acts unpivoted)
+                       stg_whd__cases, stg_whd__case_acts (27 acts unpivoted)
   -> dbt marts         dim_industry, dim_state, dim_date, fct_compliance_actions (case x act)
                        agg_industry_state_year  (public: aggregates only, small cells suppressed)
   -> Google Sheet -> Tableau Public
@@ -30,7 +30,7 @@ Decisions are recorded in `docs/adr/`:
 
 Measured on the full load:
 - **Unmapped NAICS codes: 3.04% of cases.** Mostly WHD's own `09xxx` codes, which are not valid NAICS, plus missing codes. They are kept as `UNMAPPED`, not hidden.
-- **Per-act rows add up to the case totals in 99.27% of cases.** The act rows never sum above the case total, so the acts don't overlap. In the other 2,690 cases (0.73%), the case total is higher: the source records violations that no act column carries, mostly in findings ending 2020–2022. The test `assert_case_acts_reconcile_violations` warns on them; a count well above 2,690 would point to an unpivot bug.
+- **Per-act rows add up to the case totals in 99.27% of cases.** The act rows never sum above the case total, which is consistent with acts that don't overlap (it can't prove it: an overlap could hide under uncategorized violations). In the other 2,690 cases (0.73%), the case total is higher: the source records violations that no act column carries, mostly in findings ending 2020–2022. The test `assert_case_acts_reconcile_violations` warns on them; a count well above 2,690 would point to an unpivot bug.
 - **Some cases concluded after FY2005 have findings periods that ended as early as 1984.** `dim_date` therefore starts in 1980. One record has a findings end date in the year 3021, after the record was even published; staging nulls any findings date later than the record's `load_dt`.
 - **Small-cell rule:** a sector × state × year cell with fewer than 3 cases publishes its case count only. 31.4% (6,343 of 20,191) of cells are suppressed.
 

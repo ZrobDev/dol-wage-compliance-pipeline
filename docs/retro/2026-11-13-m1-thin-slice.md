@@ -6,14 +6,14 @@
 - Backlog: yes
 
 ## State
-- #2 Snowflake bootstrap and pinned dependencies — merged — applied to DOL_WAGE by the owner
+- #2 Snowflake bootstrap and pinned dependencies — merged — applied to the project Snowflake account by the owner
 - #3 ingest client (backoff, resume, key redaction) — merged — runs locally
 - #4 dbt staging — merged — built in `WHD.STAGING`
 - #5 marts and the public aggregate — merged (before its review finished) — built in `WHD.MARTS`
 - #6 marts review fixes (small-cell rule tested on values, grain and totals test) — merged — built
 - #7 CI, `gate.yaml`, `loop-constraints.md`, MONITOR grant — merged — CI live; grant applied by the owner
 - #8 CI canary — closed — proved CI goes red
-- #9 bulk load (`--defer-load`, `pipeline load`, 5xx retry, content-hashed pages) — open, CI green — its code loaded the full backfill
+- #9 bulk load (`--defer-load`, `pipeline load`, retry on 502/503/504, content-hashed pages) — open, CI green — its code loaded the full backfill
 - #10 full-load fixes (findings dates bounded by `load_dt`, measured reconcile gap) — open — built on the full data: PASS 49, WARN 2, ERROR 0
 - docs PR (ADRs 0001–0003, README, this retro) — local on `docs/m1-adrs-readme`
 - Raw: 475,964 rows, 370,964 distinct cases = rows fetched; 248 page files
@@ -60,7 +60,7 @@ doppler run -p data-projects -c prd -- uv run dbt build --project-dir dbt --prof
 | Two versions of one page could load in one COPY with tied `loaded_at` | `ingest.run` page write | Old versions stayed on disk | `test_run_writes_deterministic_pages_and_clears_checkpoint` |
 | `dbt/.user.yml` committed | `git add -A` in a dbt worktree | Not git-ignored | `git check-ignore dbt/.user.yml` |
 | #5 merged before its review finished | placeholder PR body | Nothing said "review pending" | `review: does the placeholder body say "review pending, do not merge"?` |
-| Guard hook blocked commits in compound commands from a main-branch cwd | `~/.claude/hooks/guard-main-commit.sh` | Checks session cwd, not `git -C` target | `review: commit with git -C <worktree> in its own command` |
+| Guard hook blocked commits in compound commands from a main-branch cwd | the workstation's main-branch commit guard hook | Checks session cwd, not `git -C` target | `review: commit with git -C <worktree> in its own command` |
 
 ## Process lessons
 - Evidence: row 1, the 0.93-credit run. Rule: before a backfill, multiply loads by 60 s of warehouse time and compare with the monitor quota. Scope: global-candidate.
