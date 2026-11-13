@@ -16,3 +16,4 @@ logs/
 *.tfstate*
 # ingest checkpoint and page files
 state/
+dbt/.user.yml
