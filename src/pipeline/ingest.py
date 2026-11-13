@@ -38,7 +38,9 @@ def fetch_page(
     limit: int,
     since: str | None = None,
     sleep: Callable[[float], None] = time.sleep,
-    max_retries: int = 6,
+    # The API documents no rate limit and sends no Retry-After; its 429 window is longer
+    # than 5 minutes, so back off for up to ~50 minutes before giving up (the run resumes).
+    max_retries: int = 10,
     base_delay: float = 5.0,
 ) -> list[dict]:
     params = {"X-API-KEY": api_key, "limit": limit, "offset": offset, "sort_by": "case_id"}
@@ -56,7 +58,7 @@ def fetch_page(
             except (ValueError, KeyError, TypeError):
                 raise _error("WHD API returned an invalid response", api_key, 200) from None
         if response.status_code == 429 and attempt < max_retries:
-            sleep(min(base_delay * 2**attempt, 300))
+            sleep(min(base_delay * 2**attempt, 900))
             continue
         raise _error(
             f"WHD API returned HTTP {response.status_code}", api_key, response.status_code
