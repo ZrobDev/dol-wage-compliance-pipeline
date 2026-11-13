@@ -14,8 +14,18 @@ with deduplicated as (
             else regexp_replace(payload:naic_cd::string, '[^0-9]', '')
         end as naics_key,
         trim(payload:naics_code_description::string) as naics_description,
-        try_to_date(payload:findings_start_date::string) as findings_start_date,
-        try_to_date(payload:findings_end_date::string) as findings_end_date,
+        -- A concluded case cannot have findings in the future. The full load holds one end date
+        -- in the year 3021, a typo that falls outside dim_date, so future dates become null.
+        iff(
+            try_to_date(payload:findings_start_date::string) > current_date(),
+            null,
+            try_to_date(payload:findings_start_date::string)
+        ) as findings_start_date,
+        iff(
+            try_to_date(payload:findings_end_date::string) > current_date(),
+            null,
+            try_to_date(payload:findings_end_date::string)
+        ) as findings_end_date,
         case
             -- Measured domain: N/A, R (repeat), W (willful), RW (repeat and willful).
             when upper(trim(payload:flsa_repeat_violator::string)) in ('R', 'RW') then true

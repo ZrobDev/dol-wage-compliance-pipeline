@@ -1,7 +1,10 @@
 {{ config(severity='warn') }}
 
--- Measured on the first load: a case's violation total equals the sum of its act rows in
--- 100% of cases. A gap means an act column was misspelled or dropped from the unpivot.
+-- A case's violation total should equal the sum of its act rows. A gap can mean an act column
+-- was misspelled or dropped from the unpivot. Measured on the full load (370,964 cases):
+-- 2,690 cases (0.73%) differ, all with the case total above the act sum and none below, most
+-- with findings ending 2020-2022. The source records violations no act column carries for
+-- those cases. So this test stays a warning; a count well above 2,690 is the signal.
 with acts as (
     select case_id, sum(violations) as act_violations
     from {{ ref('stg_whd__case_acts') }}
