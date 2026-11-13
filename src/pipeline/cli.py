@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 
 from pipeline import warehouse
-from pipeline.ingest import IngestError, run
+from pipeline.ingest import IngestError, resolve_since, run
 
 
 def main(argv=None) -> int:
@@ -26,7 +26,7 @@ def main(argv=None) -> int:
         raise SystemExit("DOL_API_KEY is required")
     conn = warehouse.connect()
     try:
-        since = None if args.full else warehouse.watermark(conn)
+        since = resolve_since(args.state_dir, args.full, lambda: warehouse.watermark(conn))
         with httpx.Client(timeout=120) as client:
             pages, fetched, loaded = run(
                 client,

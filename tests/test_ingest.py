@@ -6,7 +6,7 @@ import traceback
 import httpx
 import pytest
 
-from pipeline.ingest import IngestError, fetch_page, run
+from pipeline.ingest import IngestError, fetch_page, resolve_since, run
 
 KEY = "TESTKEY-not-real-123"
 
@@ -197,3 +197,14 @@ def test_fetch_page_redacts_key_everywhere(caplog, kind):
     assert error.__cause__ is None
     assert error.__suppress_context__ is True
     assert error.status == (None if kind == "transport" else 403)
+
+
+def test_resolve_since_finishes_an_interrupted_run_before_going_incremental(tmp_path):
+    def watermark():
+        return "2026-01-16T13:04:16"
+
+    assert resolve_since(tmp_path, full=False, watermark=watermark) == "2026-01-16T13:04:16"
+    assert resolve_since(tmp_path, full=True, watermark=watermark) is None
+
+    (tmp_path / "whd_checkpoint.json").write_text('{"offset": 6000, "since": null}')
+    assert resolve_since(tmp_path, full=False, watermark=watermark) is None

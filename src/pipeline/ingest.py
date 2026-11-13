@@ -77,6 +77,18 @@ def _write_checkpoint(path: Path, offset: int, since: str | None) -> None:
     os.replace(temporary, path)
 
 
+def resolve_since(state_dir: Path, full: bool, watermark: Callable[[], str | None]) -> str | None:
+    """An interrupted run finishes first: its checkpoint's `since` wins over the watermark.
+
+    Otherwise a partial backfill would already have rows, the watermark would turn the
+    next run incremental, and every older record past the checkpoint would be skipped.
+    """
+    checkpoint = state_dir / "whd_checkpoint.json"
+    if checkpoint.exists():
+        return json.loads(checkpoint.read_text()).get("since")
+    return None if full else watermark()
+
+
 def run(
     client: httpx.Client,
     *,
