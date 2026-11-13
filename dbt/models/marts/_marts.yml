@@ -126,7 +126,7 @@ models:
         description: Civil monetary penalties assessed for the case and act.
 
   - name: agg_industry_state_year
-    description: "Grain: one row per NAICS sector, state code, and federal fiscal year. This public aggregate contains no row-level case data."
+    description: "Grain: one row per NAICS sector, state code, and federal fiscal year. This public aggregate contains no row-level case data. Small-cell rule: a cell with fewer than 3 cases keeps its case count, is_suppressed is true, and every measure is NULL."
     columns:
       - name: sector_code
         description: NAICS sector code or UNMAPPED.
@@ -142,6 +142,16 @@ models:
       - name: cases
         description: Distinct enforcement case count.
         data_tests: [not_null]
+      - name: is_suppressed
+        description: True when the cell has fewer than 3 cases; its measures are then NULL.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+              config:
+                where: "cases < 3"
       - name: case_violations
         description: Sum of case-level violations.
       - name: employees_due_back_wages
