@@ -48,8 +48,9 @@ def load_pages(conn, paths: list[Path], *, force: bool) -> int:
 
     PUT runs on the client and needs no warehouse; only COPY wakes WHD_WH, so loading many
     pages in one COPY costs about a minute of warehouse time instead of one wake per page.
-    force=True always loads (so loaded == fetched); force=False lets COPY's load history skip
-    files it has already loaded, which makes `pipeline load` safe to rerun.
+    force=True always loads (so loaded == fetched). force=False makes `pipeline load` safe to
+    rerun: PUT keeps a file that is already staged (re-uploading would change its checksum and
+    COPY would treat it as new), and COPY's load history then skips it.
     """
     rows = 0
     with conn.cursor() as cursor:
@@ -57,7 +58,7 @@ def load_pages(conn, paths: list[Path], *, force: bool) -> int:
             absolute_path = path.resolve().as_posix().replace("'", "\\'")
             cursor.execute(
                 f"PUT 'file://{absolute_path}' @WHD.RAW.WHD_STAGE/whd/ "
-                "AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE"
+                f"AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE={'TRUE' if force else 'FALSE'}"
             )
         for start in range(0, len(paths), 1000):  # COPY accepts at most 1,000 FILES
             names = ", ".join(f"'{path.name}'" for path in paths[start : start + 1000])
