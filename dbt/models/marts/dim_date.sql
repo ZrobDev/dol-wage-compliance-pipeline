@@ -2,9 +2,9 @@ with date_spine as (
     select dateadd(
         day,
         row_number() over (order by seq4()) - 1,
-        '2000-01-01'::date
+        '1980-01-01'::date
     ) as date_day
-    from table(generator(rowcount => 11323))
+    from table(generator(rowcount => 18628))
 )
 
 select

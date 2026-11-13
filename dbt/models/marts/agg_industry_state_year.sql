@@ -15,7 +15,7 @@ with cases as (
 select
     dim_industry.sector_code,
     dim_industry.sector_name,
-    cases.state_code,
+    coalesce(cases.state_code, 'UNKNOWN') as state_code,
     dim_date.federal_fiscal_year as fiscal_year,
     count(distinct cases.case_id) as cases,
     sum(cases.case_violations) as case_violations,
@@ -30,5 +30,5 @@ inner join {{ ref('dim_date') }} as dim_date
 group by
     dim_industry.sector_code,
     dim_industry.sector_name,
-    cases.state_code,
+    coalesce(cases.state_code, 'UNKNOWN'),
     dim_date.federal_fiscal_year

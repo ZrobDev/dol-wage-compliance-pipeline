@@ -30,7 +30,7 @@ seeds:
 
 models:
   - name: dim_industry
-    description: "Grain: one row per distinct cleaned NAICS key seen in staging cases. The unmapped share is measured by the singular test below and recorded in the README after the first load."
+    description: "Grain: one row per distinct cleaned NAICS key seen in staging cases. WHD's own 09xxx codes (not valid NAICS) and missing codes map to UNMAPPED; the share is measured by the singular test assert_unmapped_naics_share (warn above 5%) and stated in the README."
     columns:
       - name: naics_key
         description: Digits-only NAICS code, or UNKNOWN when fewer than two digits are available.
@@ -63,7 +63,7 @@ models:
         description: Census region or Territory.
 
   - name: dim_date
-    description: "Grain: one row per calendar date from 2000-01-01 through 2030-12-31."
+    description: "Grain: one row per calendar date from 1980-01-01 through 2030-12-31 (some cases concluded after FY2005 have findings periods ending as early as 1984)."
     columns:
       - name: date_day
         description: Calendar date.
@@ -134,7 +134,7 @@ models:
       - name: sector_name
         description: NAICS sector name.
       - name: state_code
-        description: State or territory code.
+        description: State or territory code; UNKNOWN for the few cases with no state in the source.
         data_tests: [not_null]
       - name: fiscal_year
         description: Federal fiscal year of the findings end date.
