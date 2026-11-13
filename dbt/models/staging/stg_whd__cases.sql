@@ -7,6 +7,12 @@ with deduplicated as (
         upper(trim(payload:st_cd::string)) as state_code,
         trim(payload:zip_cd::string) as zip_code,
         trim(payload:naic_cd::string) as naics_code,
+        -- Digits only; null, empty or one-digit codes become UNKNOWN.
+        case
+            when length(coalesce(regexp_replace(payload:naic_cd::string, '[^0-9]', ''), '')) < 2
+                then 'UNKNOWN'
+            else regexp_replace(payload:naic_cd::string, '[^0-9]', '')
+        end as naics_key,
         trim(payload:naics_code_description::string) as naics_description,
         try_to_date(payload:findings_start_date::string) as findings_start_date,
         try_to_date(payload:findings_end_date::string) as findings_end_date,
@@ -39,6 +45,7 @@ select
     state_code,
     zip_code,
     naics_code,
+    naics_key,
     naics_description,
     findings_start_date,
     findings_end_date,

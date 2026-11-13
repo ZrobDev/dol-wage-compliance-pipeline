@@ -23,6 +23,10 @@ models:
         description: Employer postal code retained as text.
       - name: naics_code
         description: Source NAICS code retained as text to preserve leading zeros.
+      - name: naics_key
+        description: Digits-only NAICS code, the join key to dim_industry. UNKNOWN when the source code is null or shorter than two digits.
+        tests:
+          - not_null
       - name: naics_description
         description: Source description for the NAICS code.
       - name: findings_start_date
