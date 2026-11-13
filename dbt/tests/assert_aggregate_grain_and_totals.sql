@@ -10,7 +10,7 @@ with duplicate_cells as (
 totals as (
     select
         'case total mismatch' as problem,
-        (select sum(cases) from {{ ref('agg_industry_state_year') }})
+        (select coalesce(sum(cases), 0) from {{ ref('agg_industry_state_year') }})
         - (select count(*) from {{ ref('stg_whd__cases') }} where findings_end_date is not null)
             as n
 )
