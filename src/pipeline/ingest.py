@@ -83,7 +83,8 @@ def run(
     since: str | None,
     load_page: Callable[[Path], int],
     sleep: Callable[[float], None] = time.sleep,
-    page_size: int = 10_000,
+    # The API rejects responses over 6 MB (HTTP 413); rows are ~2.8 KB, so 1,500 rows is ~4.2 MB.
+    page_size: int = 1_500,
     page_pause: float = 3.0,
 ) -> tuple[int, int, int]:
     state_dir.mkdir(parents=True, exist_ok=True)
