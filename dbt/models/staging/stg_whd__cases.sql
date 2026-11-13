@@ -14,8 +14,20 @@ with deduplicated as (
             else regexp_replace(payload:naic_cd::string, '[^0-9]', '')
         end as naics_key,
         trim(payload:naics_code_description::string) as naics_description,
-        try_to_date(payload:findings_start_date::string) as findings_start_date,
-        try_to_date(payload:findings_end_date::string) as findings_end_date,
+        -- Findings cannot end after the record was published. The full load holds exactly one
+        -- such row, an end date in the year 3021 (a typo outside dim_date). The bound is the
+        -- record's own load_dt, not current_date(): it doesn't drift with the calendar or the
+        -- session time zone, so a typo like 2027 for 2017 stays null after 2027 arrives.
+        iff(
+            try_to_date(payload:findings_start_date::string) > load_dt::date,
+            null,
+            try_to_date(payload:findings_start_date::string)
+        ) as findings_start_date,
+        iff(
+            try_to_date(payload:findings_end_date::string) > load_dt::date,
+            null,
+            try_to_date(payload:findings_end_date::string)
+        ) as findings_end_date,
         case
             -- Measured domain: N/A, R (repeat), W (willful), RW (repeat and willful).
             when upper(trim(payload:flsa_repeat_violator::string)) in ('R', 'RW') then true
