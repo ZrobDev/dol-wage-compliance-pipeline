@@ -8,4 +8,4 @@ One file per session, newest first, written by the `retro` skill and committed b
 
 ## Graduated
 Rules from this repo that passed the two-project-or-one-hour test and now live in the maintainer's global lessons file.
-none
+- 2026-11-13 `before a backfill, multiply loads by the minimum billed wake time and compare with the monitor quota` — [m1-thin-slice](2026-11-13-m1-thin-slice.md)

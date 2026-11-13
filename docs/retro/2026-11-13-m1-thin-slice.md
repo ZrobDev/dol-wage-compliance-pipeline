@@ -88,7 +88,7 @@ Status: applied 2026-11-13
 none
 
 ## Graduation candidates
-- Before a backfill, multiply loads by 60 s of warehouse time and compare with the quota — test: >1h: two-hour per-page run that used 0.93 credits, then a restart as fetch-only → pass
+- Before a backfill, multiply loads by 60 s of warehouse time and compare with the quota — test: >1h: two-hour per-page run that used 0.93 credits, then a restart as fetch-only → pass (graduated 2026-11-13)
 
 ## Next session
 1. `/retro apply` (memory proposals and the graduation candidate are pending)
