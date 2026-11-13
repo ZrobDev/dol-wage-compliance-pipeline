@@ -43,26 +43,40 @@ def watermark(conn) -> str | None:
     return row[0] if row else None
 
 
-def make_loader(conn) -> Callable[[Path], int]:
-    def load_page(path: Path) -> int:
-        absolute_path = path.resolve().as_posix().replace("'", "\\'")
-        with conn.cursor() as cursor:
+def load_pages(conn, paths: list[Path], *, force: bool) -> int:
+    """PUT the page files to the stage, then COPY them in as few statements as possible.
+
+    PUT runs on the client and needs no warehouse; only COPY wakes WHD_WH, so loading many
+    pages in one COPY costs about a minute of warehouse time instead of one wake per page.
+    force=True always loads (so loaded == fetched); force=False lets COPY's load history skip
+    files it has already loaded, which makes `pipeline load` safe to rerun.
+    """
+    rows = 0
+    with conn.cursor() as cursor:
+        for path in paths:
+            absolute_path = path.resolve().as_posix().replace("'", "\\'")
             cursor.execute(
                 f"PUT 'file://{absolute_path}' @WHD.RAW.WHD_STAGE/whd/ "
                 "AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE"
             )
+        for start in range(0, len(paths), 1000):  # COPY accepts at most 1,000 FILES
+            names = ", ".join(f"'{path.name}'" for path in paths[start : start + 1000])
             cursor.execute(
                 "COPY INTO WHD.RAW.WHD_ENFORCEMENT (payload, source_file, file_row) "
                 "FROM (SELECT $1, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER "
                 "FROM @WHD.RAW.WHD_STAGE/whd/) "
-                f"FILES = ('{path.name}') "
+                f"FILES = ({names}) "
                 "FILE_FORMAT = (TYPE = JSON STRIP_OUTER_ARRAY = TRUE COMPRESSION = GZIP) "
-                # FORCE: a resumed or repeated page always lands, so loaded == fetched holds.
-                # Raw is append-only; staging keeps the newest row per case_id.
-                "FORCE = TRUE"
+                f"FORCE = {'TRUE' if force else 'FALSE'}"
             )
             columns = [column.name.lower() for column in cursor.description]
-            index = columns.index("rows_loaded")
-            return sum(int(row[index]) for row in cursor.fetchall())
+            if "rows_loaded" in columns:  # with nothing new to load, COPY returns only a status
+                index = columns.index("rows_loaded")
+                rows += sum(int(row[index]) for row in cursor.fetchall())
+    return rows
 
-    return load_page
+
+def make_loader(conn) -> Callable[[Path], int]:
+    # FORCE: a resumed or repeated page always lands, so loaded == fetched holds.
+    # Raw is append-only; staging keeps the newest row per case_id.
+    return lambda path: load_pages(conn, [path], force=True)
