@@ -32,6 +32,17 @@ CREATE WAREHOUSE IF NOT EXISTS WHD_WH WITH
 -- Set separately so the assignment also holds for a warehouse created before the monitor.
 ALTER WAREHOUSE WHD_WH SET RESOURCE_MONITOR = WHD_MONTHLY;
 
+-- Account-wide ceiling: every warehouse, including the trial's default one used by Snowsight.
+-- 3 credits (~$6/month) sits above the pipeline's 2, so the pipeline monitor fires first.
+CREATE RESOURCE MONITOR IF NOT EXISTS WHD_ACCOUNT WITH
+  CREDIT_QUOTA = 3
+  FREQUENCY = MONTHLY
+  START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS
+    ON 75 PERCENT DO NOTIFY
+    ON 100 PERCENT DO SUSPEND;
+ALTER ACCOUNT SET RESOURCE_MONITOR = WHD_ACCOUNT;
+
 -- One role for loading and transforming. Granted to SYSADMIN so admins inherit it.
 CREATE ROLE IF NOT EXISTS WHD_PIPELINE;
 GRANT ROLE WHD_PIPELINE TO ROLE SYSADMIN;
@@ -71,3 +82,9 @@ GRANT ROLE WHD_PIPELINE TO USER WHD_SVC;
 -- manager, never on disk or screen), then set the public key body here:
 --   ALTER USER WHD_SVC SET RSA_PUBLIC_KEY = '<public key body, no BEGIN/END lines>';
 --   DESC USER WHD_SVC;  -- RSA_PUBLIC_KEY_FP is set
+--
+-- Key rotation without downtime: set the new public key in the second slot, switch the secret
+-- to the new private key, confirm a connection, then clear the old slot.
+--   ALTER USER WHD_SVC SET RSA_PUBLIC_KEY_2 = '<new public key body>';
+--   ALTER USER WHD_SVC UNSET RSA_PUBLIC_KEY;
+-- No network policy yet: the operator's IP is dynamic. One arrives with CI in M3.
