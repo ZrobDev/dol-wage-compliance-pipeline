@@ -2,10 +2,10 @@
 
 A data pipeline over the U.S. Department of Labor Wage and Hour Division (WHD) enforcement data. It answers three questions: which industries and states see wage-law violations, how much back pay is owed, and how that changes over time.
 
-**Status: M1 (thin slice) done, except the published chart.**
+**Status: M1 (thin slice) done.**
 - **Data loaded:** every WHD enforcement case (370,964 cases, FY2005 onward).
 - **Models:** a deduplicated staging layer and a star schema, 41 dbt tests.
-- **Public output:** one public aggregate and one chart. Next is M2: orchestration with Airflow.
+- **Public output:** one public aggregate and [one chart on Tableau Public](https://public.tableau.com/views/BackwagesowedbyindustryDOLWHD/BackwagesowedbyindustryDOLWHD). Next is M2: orchestration with Airflow.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ DOL WHD API  (key in the query string, 6 MB response cap, ~10 requests per 15 mi
                        stg_whd__cases, stg_whd__case_acts (27 acts unpivoted)
   -> dbt marts         dim_industry, dim_state, dim_date, fct_compliance_actions (case x act)
                        agg_industry_state_year  (public: aggregates only, small cells suppressed)
-  -> Google Sheet -> Tableau Public
+  -> CSV export -> Tableau Public
 ```
 
 Decisions are recorded in `docs/adr/`:
@@ -68,7 +68,9 @@ CI runs ruff, pytest, `dbt parse` and gitleaks on every pull request. None of th
 
 ## Chart
 
-Pending: the Tableau Public link goes here once the aggregate is published. The chart reads `agg_industry_state_year` (sector × state × fiscal year, small cells suppressed), exported to a Google Sheet.
+[Back wages owed by industry (DOL WHD)](https://public.tableau.com/views/BackwagesowedbyindustryDOLWHD/BackwagesowedbyindustryDOLWHD) on Tableau Public.
+
+The chart reads `agg_industry_state_year` (sector × state × fiscal year, small cells suppressed), exported as a CSV and uploaded in Tableau Public's web editor. Suppressed cells are filtered out of the chart; they carry no figures anyway. The upload is a static extract: refreshing the chart means exporting the CSV again and republishing.
 
 ## Milestones
 
