@@ -12,3 +12,15 @@ whd:
       schema: STAGING
       threads: 4
       query_tag: dbt
+    # Airflow on the homelab: the key is a Compose secret file, never an env var (infra/airflow).
+    homelab:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key_path: /run/secrets/snowflake_private_key
+      role: WHD_PIPELINE
+      warehouse: WHD_WH
+      database: WHD
+      schema: STAGING
+      threads: 4
+      query_tag: dbt-airflow

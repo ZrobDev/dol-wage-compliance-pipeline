@@ -1,7 +1,8 @@
 """Where the ingest checkpoint and page files live, and who may write them.
 
 On the laptop the state dir is `./state`, created on first use. Under Airflow it is a mounted
-volume named by PIPELINE_STATE_DIR. That path must already exist: creating it would silently put
+volume named by PIPELINE_STATE_DIR. That path must already exist and carry the volume marker file:
+creating it would silently put
 the checkpoint in the container's writable layer, which vanishes when the container is recreated,
 and an interrupted backfill would then restart from the watermark.
 """
@@ -16,6 +17,9 @@ ENV_VAR = "PIPELINE_STATE_DIR"
 DEFAULT = Path("state")
 # Outside the `whd_*.json.gz` page glob, so a load never picks it up.
 LOCK_NAME = ".pipeline.lock"
+# Written once by the host setup onto the mounted volume (infra/airflow/README.md). A directory
+# that a container runtime created for a missing bind mount is empty, so it lacks this file.
+MARKER_NAME = ".whd-state-volume"
 EXIT_BAD_STATE_DIR = 4
 EXIT_LOCKED = 3
 
@@ -47,6 +51,12 @@ def resolve_state_dir(flag: Path | None) -> Path:
         raise StateDirError(f"{ENV_VAR} must be an absolute path, got {configured!r}")
     if not path.is_dir():
         raise StateDirError(f"{ENV_VAR}={configured} does not exist; mount the state volume there")
+    if not (path / MARKER_NAME).is_file():
+        # Some runtimes (Podman, and Docker with short-syntax binds) create a missing bind
+        # source as an empty directory, so "the directory exists" proves nothing on its own.
+        raise StateDirError(
+            f"{ENV_VAR}={configured} has no {MARKER_NAME}; it is not the provisioned state volume"
+        )
     if not os.access(path, os.W_OK | os.X_OK):
         raise StateDirError(f"{ENV_VAR}={configured} is not writable by this user")
     return path

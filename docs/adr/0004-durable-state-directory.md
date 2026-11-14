@@ -15,7 +15,8 @@ On the laptop both live in `./state`. Under Airflow (M2) the task runs in a cont
 
 - **One state directory, named by `PIPELINE_STATE_DIR`.** The `--state-dir` flag wins over it, and `./state` is the fallback when neither is set.
 - **The env path must be absolute and must already exist, and the pipeline never creates it.**
-  - If it is empty, relative, missing or not writable, the command exits 4 before it touches the API or Snowflake. An empty value counts as an error, not as unset, because Compose expands a missing `${PIPELINE_STATE_DIR}` to an empty string.
+  - It must also contain the marker file `.whd-state-volume`, which the host setup writes once onto the mounted volume.
+  - If it is empty, relative, missing, unmarked or not writable, the command exits 4 before it touches the API or Snowflake. An empty value counts as an error, not as unset, because Compose expands a missing `${PIPELINE_STATE_DIR}` to an empty string.
   - Creating the directory would hide a forgotten volume: the state would land in the container's writable layer and vanish when the container is recreated.
   - The laptop default and the flag still create their directory.
 - **One writer at a time.** Every `ingest` and `load` holds a non-blocking `flock` on `.pipeline.lock` in the state directory for the whole command.
@@ -31,9 +32,10 @@ On the laptop both live in `./state`. Under Airflow (M2) the task runs in a cont
 
 - The state directory is a dedicated volume or bind mount, and nothing else is stored on it. `findmnt -T "$PIPELINE_STATE_DIR"` must show a real filesystem, never `overlay` or `tmpfs`.
 - Ownership is set on the volume, for the user the task runs as (Airflow's image uses UID 50000).
-- **The image never creates the path, and the DAG passes the env var, not `--state-dir`.**
-  - The existence check catches a missing volume only if nothing else creates the directory. A `mkdir` in the Dockerfile, or the flag, which still creates its directory, would let a forgotten mount pass.
-  - The check is "the directory exists", not "it is a mount point". The `findmnt` check above is the deploy-time proof.
+- **The marker lives only on the volume.** Write it once on the mounted volume (`touch .whd-state-volume`), never in the image and never on the host's root filesystem.
+  - Some runtimes create a missing bind source as an empty directory. Podman does, even with `--mount` (seen in the M2 smoke test, 2026-11-13). So "the directory exists" proves nothing on its own; the marker does.
+  - The DAG passes the env var, not `--state-dir`, because the flag still creates its directory.
+  - The marker shows the right volume was mounted once. `findmnt` at deploy time is the proof that it is mounted now.
 - It holds row-level records from the public WHD source. It is never committed (`state/` is in `.gitignore` and `gate.yaml`), and nothing in it is published (ADR 0002).
 
 ## Consequences

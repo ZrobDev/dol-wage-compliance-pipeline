@@ -1,16 +1,14 @@
-import os
 from collections.abc import Callable
 from pathlib import Path
 
 import snowflake.connector
 from cryptography.hazmat.primitives import serialization
 
+from pipeline.secrets import secret
+
 
 def _required(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise SystemExit(f"{name} is required")
-    return value
+    return secret(name)
 
 
 def connect():

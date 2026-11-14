@@ -13,6 +13,7 @@ from pipeline.state import (
     EXIT_BAD_STATE_DIR,
     EXIT_LOCKED,
     LOCK_NAME,
+    MARKER_NAME,
     StateDirError,
     StateDirLocked,
     exclusive,
@@ -26,9 +27,22 @@ def test_flag_wins_over_env(tmp_path, monkeypatch):
     assert (tmp_path / "flag").is_dir()
 
 
-def test_env_is_used_when_it_names_an_existing_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv(ENV_VAR, str(tmp_path))
+def provisioned(path):
+    path.mkdir(parents=True, exist_ok=True)
+    (path / MARKER_NAME).touch()
+    return path
+
+
+def test_env_is_used_when_it_names_the_provisioned_volume(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_VAR, str(provisioned(tmp_path)))
     assert resolve_state_dir(None) == tmp_path
+
+
+def test_env_dir_without_the_marker_is_refused(tmp_path, monkeypatch):
+    # What a runtime leaves when it auto-creates a missing bind source: an empty directory.
+    monkeypatch.setenv(ENV_VAR, str(tmp_path))
+    with pytest.raises(StateDirError, match=MARKER_NAME):
+        resolve_state_dir(None)
 
 
 def test_env_dir_is_never_created(tmp_path, monkeypatch):
@@ -57,8 +71,8 @@ def test_env_must_be_absolute(monkeypatch):
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
 def test_env_must_be_writable(tmp_path, monkeypatch):
-    read_only = tmp_path / "ro"
-    read_only.mkdir(mode=0o555)
+    read_only = provisioned(tmp_path / "ro")
+    read_only.chmod(0o555)
     monkeypatch.setenv(ENV_VAR, str(read_only))
     with pytest.raises(StateDirError, match="not writable"):
         resolve_state_dir(None)

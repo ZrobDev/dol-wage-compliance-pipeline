@@ -1,6 +1,5 @@
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -8,6 +7,7 @@ import httpx
 
 from pipeline import warehouse
 from pipeline.ingest import IngestError, resolve_since, run
+from pipeline.secrets import secret
 from pipeline.state import StateDirError, exclusive, resolve_state_dir
 
 
@@ -28,7 +28,7 @@ def main(argv=None) -> int:
         "--state-dir",
         type=Path,
         default=None,
-        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, must exist), else ./state",
+        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, provisioned volume with its marker), else ./state",
     )
     ingest.add_argument("--page-pause", type=float, default=3.0)
     ingest.add_argument(
@@ -44,7 +44,7 @@ def main(argv=None) -> int:
         "--state-dir",
         type=Path,
         default=None,
-        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, must exist), else ./state",
+        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, provisioned volume with its marker), else ./state",
     )
     args = parser.parse_args(argv)
 
@@ -68,8 +68,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(f"files={files} newly_loaded_rows={loaded}")
         return 0
 
-    if "DOL_API_KEY" not in os.environ:
-        raise SystemExit("DOL_API_KEY is required")
+    api_key = secret("DOL_API_KEY")
     conn = warehouse.connect()
     try:
         since = resolve_since(args.state_dir, args.full, lambda: warehouse.watermark(conn))
@@ -77,7 +76,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             with httpx.Client(timeout=120) as client:
                 pages, fetched, loaded = run(
                     client,
-                    api_key=os.environ["DOL_API_KEY"],
+                    api_key=api_key,
                     state_dir=args.state_dir,
                     since=since,
                     load_page=(lambda page: 0) if args.defer_load else warehouse.make_loader(conn),

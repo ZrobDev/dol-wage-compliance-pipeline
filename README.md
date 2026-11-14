@@ -65,7 +65,7 @@ uv run pipeline load                             # load any page files left on d
 uv run dbt build --project-dir dbt --profiles-dir dbt
 ```
 
-The checkpoint and page files live in `./state` by default. Set `PIPELINE_STATE_DIR` to an absolute path that already exists (a mounted volume, under Airflow) to keep them across container restarts. Only one `ingest` or `load` runs per state directory at a time: a second one exits with code 3.
+The checkpoint and page files live in `./state` by default. Under Airflow, set `PIPELINE_STATE_DIR` to the mounted volume, which must already exist and carry the `.whd-state-volume` marker (ADR 0004, `infra/airflow/README.md`), so the state survives container restarts. Only one `ingest` or `load` runs per state directory at a time: a second one exits with code 3.
 
 CI runs ruff, pytest, `dbt parse` and gitleaks on every pull request. None of these need credentials.
 
@@ -80,7 +80,7 @@ The chart reads `agg_industry_state_year` (sector × state × fiscal year, small
 | Milestone | Scope | Status |
 |---|---|---|
 | M1 | One source, then warehouse raw, then dbt staging and marts with tests and docs, then one chart. Runs locally. | done |
-| M2 | Orchestration with Airflow 3 and Cosmos on the homelab. | next |
+| M2 | Orchestration with Airflow 3 and Cosmos on the homelab: a weekly DAG over `pipeline ingest` and the dbt models (`infra/airflow/`). | in progress |
 | M3 | Terraform, CI with Snowflake auth, the S3 landing zone, least-privilege roles, a network policy. | |
 | M4 | The public layer: the export, Tableau Public, the dbt docs site. | |
 
