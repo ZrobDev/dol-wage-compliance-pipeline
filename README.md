@@ -25,6 +25,7 @@ Decisions are recorded in `docs/adr/`:
 - **0001:** Snowflake as the warehouse, loaded through an internal stage.
 - **0002:** the public export holds aggregates only, under a small-cell rule.
 - **0003:** a thin ingest CLI now, with orchestration in M2.
+- **0004:** a durable state directory (`PIPELINE_STATE_DIR`) for the checkpoint and page files, with one writer at a time.
 
 ## What the data says about itself
 
@@ -63,6 +64,8 @@ uv run pipeline ingest                           # later runs: only records past
 uv run pipeline load                             # load any page files left on disk
 uv run dbt build --project-dir dbt --profiles-dir dbt
 ```
+
+The checkpoint and page files live in `./state` by default. Set `PIPELINE_STATE_DIR` to an absolute path that already exists (a mounted volume, under Airflow) to keep them across container restarts. Only one `ingest` or `load` runs per state directory at a time: a second one exits with code 3.
 
 CI runs ruff, pytest, `dbt parse` and gitleaks on every pull request. None of these need credentials.
 

@@ -6,6 +6,7 @@ import os
 import re
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -78,10 +79,18 @@ def _tag(since: str | None) -> str:
     return "full" if since is None else re.sub(r"[^A-Za-z0-9]", "-", since)
 
 
-def _write_checkpoint(path: Path, offset: int, since: str | None) -> None:
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"offset": offset, "since": since}))
+def _write_atomic(path: Path, body: bytes) -> None:
+    # The temporary name sits outside the `whd_*.json.gz` glob, so a load never reads a page that
+    # a killed task left half-written.
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(body)
     os.replace(temporary, path)
+
+
+def _write_checkpoint(path: Path, offset: int, since: str | None) -> None:
+    written_at = datetime.now(UTC).isoformat(timespec="seconds")
+    body = {"offset": offset, "since": since, "written_at": written_at}
+    _write_atomic(path, json.dumps(body).encode())
 
 
 def resolve_since(state_dir: Path, full: bool, watermark: Callable[[], str | None]) -> str | None:
@@ -118,6 +127,14 @@ def run(
         saved = json.loads(checkpoint.read_text())
         if saved.get("since") == since:
             offset = saved["offset"]
+            # A durable checkpoint can outlive the data it points into: an incremental run's
+            # offset counts rows past `since`, and that result set shifts as new rows arrive.
+            LOGGER.warning(
+                "resuming at offset %s (since=%s) from a checkpoint written at %s",
+                offset,
+                since or "full",
+                saved.get("written_at", "unknown"),
+            )
 
     pages = rows_fetched = rows_loaded = 0
     while True:
@@ -143,7 +160,7 @@ def run(
         for stale in pages_dir.glob(f"{prefix}*.json.gz"):
             if stale != page:
                 stale.unlink()
-        page.write_bytes(body)
+        _write_atomic(page, body)
         rows_loaded += load_page(page)
         offset += len(data)
         _write_checkpoint(checkpoint, offset, since)

@@ -8,6 +8,7 @@ import httpx
 
 from pipeline import warehouse
 from pipeline.ingest import IngestError, resolve_since, run
+from pipeline.state import StateDirError, exclusive, resolve_state_dir
 
 
 def main(argv=None) -> int:
@@ -21,9 +22,14 @@ def main(argv=None) -> int:
         "--full",
         action="store_true",
         help="ignore the load_dt watermark and pull every record; an interrupted full run "
-        "resumes from its checkpoint (delete state/whd_checkpoint.json to start from zero)",
+        "resumes from its checkpoint (delete whd_checkpoint.json in the state dir to start from zero)",
     )
-    ingest.add_argument("--state-dir", type=Path, default=Path("state"))
+    ingest.add_argument(
+        "--state-dir",
+        type=Path,
+        default=None,
+        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, must exist), else ./state",
+    )
     ingest.add_argument("--page-pause", type=float, default=3.0)
     ingest.add_argument(
         "--defer-load",
@@ -34,8 +40,24 @@ def main(argv=None) -> int:
     load = subcommands.add_parser(
         "load", help="load every page file in the state dir that Snowflake has not loaded yet"
     )
-    load.add_argument("--state-dir", type=Path, default=Path("state"))
+    load.add_argument(
+        "--state-dir",
+        type=Path,
+        default=None,
+        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, must exist), else ./state",
+    )
     args = parser.parse_args(argv)
+
+    try:
+        args.state_dir = resolve_state_dir(args.state_dir)
+        with exclusive(args.state_dir):
+            return _dispatch(args)
+    except StateDirError as error:
+        print(error, file=sys.stderr)
+        return error.exit_code
+
+
+def _dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "load":
         conn = warehouse.connect()
