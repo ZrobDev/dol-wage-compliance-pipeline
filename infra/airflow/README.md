@@ -89,13 +89,16 @@ Never print `docker compose config` in full; grep it for one key.
 
 ## Backfill
 
-The weekly DAG is incremental. A full backfill (about 6 hours) runs by hand in the scheduler container, in the background, and always uses `--defer-load`:
+The weekly DAG is incremental. A full backfill (about 6 hours) runs by hand in the scheduler container and always uses `--defer-load`. Pause the DAG first, so the two never meet at the state-dir lock:
 
 ```bash
-docker compose exec -d airflow-scheduler /opt/pipeline/.venv/bin/pipeline ingest --full --defer-load
+docker compose exec airflow-scheduler airflow dags pause whd_weekly
+# In tmux or another session that survives logout; not `exec -d`, which hides the exit code.
+docker compose exec -T airflow-scheduler /opt/pipeline/.venv/bin/pipeline ingest --full --defer-load; echo "exit=$?"
+docker compose exec airflow-scheduler airflow dags unpause whd_weekly
 ```
 
-The state-dir lock keeps the weekly run and a backfill from overlapping. Whichever starts second exits with code 3, and its Airflow retry picks it up later.
+Exit 3 means another command holds the lock, so nothing ran. Exit 2 means the API failed: the pages fetched so far are loaded, and rerunning the same command resumes from the checkpoint.
 
 ## Logging
 

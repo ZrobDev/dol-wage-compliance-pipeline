@@ -164,3 +164,19 @@ def test_checkpoint_records_when_it_was_written(tmp_path):
     # Atomic writes leave no temporary files behind.
     assert not list(tmp_path.rglob("*.tmp"))
     assert len(list((tmp_path / "pages").glob("whd_*.json.gz"))) == 1
+
+
+def test_resume_logs_when_the_checkpoint_was_written(tmp_path, caplog):
+    (tmp_path / "whd_checkpoint.json").write_text(
+        json.dumps({"offset": 4, "since": None, "written_at": "2026-11-01T00:00:00+00:00"})
+    )
+    offsets = []
+
+    def handler(request):
+        offsets.append(int(request.url.params["offset"]))
+        return httpx.Response(200, json={"data": []})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http, caplog.at_level("WARNING"):
+        run(http, api_key="k", state_dir=tmp_path, since=None, load_page=lambda page: 0)
+    assert offsets == [4]
+    assert "checkpoint written at 2026-11-01T00:00:00+00:00" in caplog.text

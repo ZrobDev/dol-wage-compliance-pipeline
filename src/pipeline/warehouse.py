@@ -7,17 +7,13 @@ from cryptography.hazmat.primitives import serialization
 from pipeline.secrets import secret
 
 
-def _required(name: str) -> str:
-    return secret(name)
-
-
 def connect():
     private_key = serialization.load_pem_private_key(
-        _required("SNOWFLAKE_PRIVATE_KEY").encode(), password=None
+        secret("SNOWFLAKE_PRIVATE_KEY").encode(), password=None
     )
     return snowflake.connector.connect(
-        account=_required("SNOWFLAKE_ACCOUNT"),
-        user=_required("SNOWFLAKE_USER"),
+        account=secret("SNOWFLAKE_ACCOUNT"),
+        user=secret("SNOWFLAKE_USER"),
         private_key=private_key.private_bytes(
             serialization.Encoding.DER,
             serialization.PrivateFormat.PKCS8,

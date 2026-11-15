@@ -23,6 +23,8 @@ EXPECTED = {
     "snowflake_private_key": {"airflow-scheduler"},
 }
 
+PIPELINE_ONLY = ("dol_api_key", "snowflake_private_key")
+
 
 def check(text: str) -> list[str]:
     problems = []
@@ -44,6 +46,13 @@ def check(text: str) -> list[str]:
         for service in granted_to:
             if name not in (services.get(service, {}).get("secrets") or []):
                 problems.append(f"service {service} is not granted secret {name}")
+    # The pipeline's own secrets reach the scheduler only: LocalExecutor runs tasks there.
+    for name in PIPELINE_ONLY:
+        holders = {svc for svc, body in services.items() if name in (body.get("secrets") or [])}
+        if holders != EXPECTED[name]:
+            problems.append(
+                f"secret {name} is granted to {sorted(holders)}, not only the scheduler"
+            )
     for service_name, service in services.items():
         env = service.get("environment") or {}
         for key, value in env.items() if isinstance(env, dict) else []:
@@ -78,6 +87,11 @@ def test_compose_file_passes_the_secrets_guard():
             "DOL_API_KEY appears outside",
         ),
         ("      - dol_api_key\n", "", "not granted secret dol_api_key"),
+        (
+            "  secrets: &airflow-secrets\n    - postgres_password\n",
+            "  secrets: &airflow-secrets\n    - postgres_password\n    - snowflake_private_key\n",
+            "snowflake_private_key is granted to",
+        ),
         ("    environment: SNOWFLAKE_PRIVATE_KEY\n", "    file: ./key\n", "no top-level"),
         (
             "          create_host_path: false\n",
