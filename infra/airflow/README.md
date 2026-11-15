@@ -47,6 +47,20 @@ The container itself is created by the homelab repo's own scripts. This repo ass
   chown -R 50000:0 /srv/whd-state && chmod 0750 /srv/whd-state
   ```
 - nothing published beyond the container's `127.0.0.1`. The UI is reached with `ssh -L 8080:127.0.0.1:8080 <host>`.
+- the Doppler CLI on the host, plus a read-only service token for `data-projects/prd` scoped to the checkout, because the deploy below runs `doppler run` there. Add Doppler's apt repository first ([install-cli](https://docs.doppler.com/docs/install-cli)), then:
+
+  ```bash
+  # on the Docker host: pinned CLI, checkout at a known commit, cloned over HTTPS
+  apt-get install -y doppler=3.77.0 && apt-mark hold doppler
+  git clone https://github.com/ZrobDev/dol-wage-compliance-pipeline.git /opt/dol-wage-compliance-pipeline
+  git -C /opt/dol-wage-compliance-pipeline checkout --detach <commit>
+
+  # on a workstation logged in to Doppler: the token goes through a pipe, never onto a screen or into argv
+  doppler configs tokens create <host>-whd-airflow -p data-projects -c prd --plain \
+    | ssh <host> 't=$(cat); [ -n "$t" ] || exit 1; printf %s "$t" | doppler configure set token --scope /opt/dol-wage-compliance-pipeline >/dev/null && echo token-ok'
+  ```
+
+  Inside the checkout the scoped token selects the project and config, so `doppler run --` needs no `-p`/`-c`. Run every `docker compose` command, `ps` and `exec` included, under `doppler run --`: the compose file reads its secret sources and Snowflake identifiers from the environment. The token reads every secret in `prd`, and it sits in root's Doppler config on the host's disk, so the host's backups carry it. When the host is retired, find the token's slug with `doppler configs tokens -p data-projects -c prd` and revoke it with `doppler configs tokens revoke <slug> -p data-projects -c prd`. First run 2026-11-15 on the homelab's CT 121, at `a340319`.
 
 **Never `mkdir /srv/whd-state` or write the marker anywhere but the mounted volume.** If the mount is missing:
 - Docker Engine refuses to start the scheduler (`create_host_path: false`).
