@@ -183,10 +183,9 @@ def test_run_raises_on_500_after_a_full_page_and_keeps_the_checkpoint(tmp_path):
         )
     assert caught.value.status == 500
     assert calls == [0, 2]
-    assert json.loads((tmp_path / "whd_checkpoint.json").read_text()) == {
-        "offset": 2,
-        "since": None,
-    }
+    saved = json.loads((tmp_path / "whd_checkpoint.json").read_text())
+    assert {key: saved[key] for key in ("offset", "since")} == {"offset": 2, "since": None}
+    assert set(saved) == {"offset", "since", "written_at"}
 
 
 @pytest.mark.parametrize("body", [{"data": None}, {"data": {}}, {"rows": []}])

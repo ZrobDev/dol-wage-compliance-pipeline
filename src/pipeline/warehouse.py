@@ -1,25 +1,19 @@
-import os
 from collections.abc import Callable
 from pathlib import Path
 
 import snowflake.connector
 from cryptography.hazmat.primitives import serialization
 
-
-def _required(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise SystemExit(f"{name} is required")
-    return value
+from pipeline.secrets import secret
 
 
 def connect():
     private_key = serialization.load_pem_private_key(
-        _required("SNOWFLAKE_PRIVATE_KEY").encode(), password=None
+        secret("SNOWFLAKE_PRIVATE_KEY").encode(), password=None
     )
     return snowflake.connector.connect(
-        account=_required("SNOWFLAKE_ACCOUNT"),
-        user=_required("SNOWFLAKE_USER"),
+        account=secret("SNOWFLAKE_ACCOUNT"),
+        user=secret("SNOWFLAKE_USER"),
         private_key=private_key.private_bytes(
             serialization.Encoding.DER,
             serialization.PrivateFormat.PKCS8,

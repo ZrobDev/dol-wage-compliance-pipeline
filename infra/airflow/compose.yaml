@@ -1,0 +1,143 @@
+# Airflow 3 (LocalExecutor) + Cosmos for the WHD pipeline, on one Docker host (M2).
+# Run from infra/airflow with the secrets in the environment, e.g.:
+#   doppler run -p data-projects -c prd -- docker compose up -d
+# Every secret is a Compose secret mounted at /run/secrets/<name>, never an env var
+# (tests/test_compose_secrets.py enforces it). SNOWFLAKE_ACCOUNT and SNOWFLAKE_USER are
+# identifiers, not credentials, and are passed as plain config.
+# Nothing listens beyond 127.0.0.1; reach the UI with an SSH tunnel.
+
+# A fixed project name, so container names do not depend on the checkout's folder name.
+name: whd-airflow
+
+x-airflow: &airflow
+  image: whd-airflow:local
+  build:
+    context: ../..
+    dockerfile: infra/airflow/Dockerfile
+  user: "50000:0"
+  restart: unless-stopped
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: "4"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: admin:admin
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/auth/passwords.json
+    AIRFLOW__API_AUTH__JWT_ISSUER: whd-airflow
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # Each _CMD reads its secret file and exits non-zero on an empty value, so Airflow refuses to
+    # start rather than run with no Fernet key or a blank password. The DB password is hex
+    # (README), so it needs no URL-encoding.
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_CMD: >-
+      sh -c 'v=$$(cat /run/secrets/postgres_password) && [ -n "$$v" ] &&
+      printf "postgresql+psycopg2://airflow:%s@postgres/airflow" "$$v"'
+    AIRFLOW__CORE__FERNET_KEY_CMD: >-
+      sh -c 'v=$$(cat /run/secrets/airflow_fernet_key) && [ -n "$$v" ] && printf %s "$$v"'
+    AIRFLOW__API_AUTH__JWT_SECRET_CMD: >-
+      sh -c 'v=$$(cat /run/secrets/airflow_jwt_secret) && [ -n "$$v" ] && printf %s "$$v"'
+    AIRFLOW__API__SECRET_KEY_CMD: >-
+      sh -c 'v=$$(cat /run/secrets/airflow_api_secret_key) && [ -n "$$v" ] && printf %s "$$v"'
+  secrets: &airflow-secrets
+    - postgres_password
+    - airflow_fernet_key
+    - airflow_jwt_secret
+    - airflow_api_secret_key
+  volumes:
+    - logs:/opt/airflow/logs
+  depends_on: &after-db
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_DB: airflow
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow", "-d", "airflow"]
+      interval: 10s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow
+    restart: "no"
+    entrypoint: ["airflow"]
+    command: ["db", "migrate"]
+
+  airflow-apiserver:
+    <<: *airflow
+    command: api-server
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - logs:/opt/airflow/logs
+      - auth:/opt/airflow/auth
+    depends_on: &after-init
+      airflow-init:
+        condition: service_completed_successfully
+
+  # LocalExecutor runs every task as a child of the scheduler, so only the scheduler gets the
+  # pipeline's secrets and the state volume.
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    environment:
+      <<: *airflow-env
+      # A literal, never ${...}: an unset variable must not turn into an empty path.
+      PIPELINE_STATE_DIR: /var/lib/pipeline/state
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:?set SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_USER: ${SNOWFLAKE_USER:?set SNOWFLAKE_USER}
+    secrets:
+      - postgres_password
+      - airflow_fernet_key
+      - airflow_jwt_secret
+      - airflow_api_secret_key
+      - dol_api_key
+      - snowflake_private_key
+    volumes:
+      - logs:/opt/airflow/logs
+      # The durable state dir (ADR 0004). create_host_path: false asks Docker to refuse a missing
+      # host directory. Podman creates it anyway, so the pipeline also requires the marker file
+      # that the host setup writes onto the volume.
+      - type: bind
+        source: /srv/whd-state
+        target: /var/lib/pipeline/state
+        bind:
+          create_host_path: false
+    depends_on: *after-init
+
+  airflow-dag-processor:
+    <<: *airflow
+    command: dag-processor
+    depends_on: *after-init
+
+  airflow-triggerer:
+    <<: *airflow
+    command: triggerer
+    depends_on: *after-init
+
+secrets:
+  postgres_password:
+    environment: AIRFLOW_POSTGRES_PASSWORD
+  airflow_fernet_key:
+    environment: AIRFLOW_FERNET_KEY
+  airflow_jwt_secret:
+    environment: AIRFLOW_JWT_SECRET
+  airflow_api_secret_key:
+    environment: AIRFLOW_API_SECRET_KEY
+  dol_api_key:
+    environment: DOL_API_KEY
+  snowflake_private_key:
+    environment: SNOWFLAKE_PRIVATE_KEY
+
+volumes:
+  pgdata: {}
+  logs: {}
+  auth: {}

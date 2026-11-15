@@ -1,0 +1,17 @@
+# Build context is the repo root. Allowlist only: state/ holds row-level API pages and .env files
+# hold secrets, and neither may ever enter an image layer.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!.python-version
+!src/
+!dbt/
+!airflow/
+!infra/airflow/requirements-airflow.txt
+**/__pycache__
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
