@@ -70,7 +70,7 @@ The container itself is created by the homelab repo's own scripts. This repo ass
 ## Deploy
 
 ```bash
-ssh whd-airflow /opt/dol-wage-compliance-pipeline/infra/airflow/deploy.sh   # ends "deploy: ok <sha>"
+ssh <host> /opt/dol-wage-compliance-pipeline/infra/airflow/deploy.sh   # ends "deploy: ok <sha>"
 ```
 
 `deploy.sh` refuses when the checkout has local changes under any path the image is built from, or when a `whd_weekly` run is in progress. Restarting the scheduler mid-run would kill ingest. It then:

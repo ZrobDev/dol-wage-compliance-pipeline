@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy the Airflow stack from origin/main, with the image labelled by the commit it was built
 # from (the drift task reads it). Run on the host, from anywhere:
-#   ssh whd-airflow /opt/dol-wage-compliance-pipeline/infra/airflow/deploy.sh
+#   ssh <host> /opt/dol-wage-compliance-pipeline/infra/airflow/deploy.sh
 # Refuses local edits to anything that enters the image, and a whd_weekly run in progress
 # (restarting the scheduler would kill it mid-ingest).
 # -E: the ERR trap also fires inside main().
