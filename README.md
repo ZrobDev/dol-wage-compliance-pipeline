@@ -73,7 +73,13 @@ CI runs ruff, pytest, `dbt parse` and gitleaks on every pull request. None of th
 
 [Back wages owed by industry (DOL WHD)](https://public.tableau.com/views/BackwagesowedbyindustryDOLWHD/BackwagesowedbyindustryDOLWHD) on Tableau Public.
 
-The chart reads `agg_industry_state_year` (sector × state × fiscal year, small cells suppressed), exported as a CSV and uploaded in Tableau Public's web editor. Suppressed cells are filtered out of the chart; they carry no figures anyway. The upload is a static extract: refreshing the chart means exporting the CSV again and republishing.
+The chart reads `agg_industry_state_year` (sector × state × fiscal year, small cells suppressed), exported as a CSV and uploaded in Tableau Public's web editor. Suppressed cells are filtered out of the chart; they carry no figures anyway. The upload is a static extract. Tableau Public has no publishing API and refreshes automatically only from Google Sheets, so after a weekly run that loaded new rows (DOL loads about quarterly), refresh it by hand:
+
+```bash
+doppler run -p data-projects -c prd -- uv run pipeline export   # rows=… path=state/exports/agg_industry_state_year.csv
+```
+
+Then replace the data source in Tableau Public's web editor with that file, and check that the status bar shows more than 0 marks before Publish. The export refuses to write (exit 5) if any cell breaks the small-cell rule, and a failed run leaves the previous file in place.
 
 ## Milestones
 

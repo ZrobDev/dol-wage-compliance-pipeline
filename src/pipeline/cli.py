@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 
 from pipeline import warehouse
+from pipeline.export import ExportError, check_small_cells, write_csv
 from pipeline.ingest import IngestError, newest_load_dt, resolve_since, run
 from pipeline.secrets import secret
 from pipeline.state import StateDirError, exclusive, resolve_state_dir
@@ -53,18 +54,41 @@ def main(argv=None) -> int:
         default=None,
         help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, provisioned volume with its marker), else ./state",
     )
+    export = subcommands.add_parser(
+        "export",
+        help="write agg_industry_state_year to <state dir>/exports/ as the CSV for the "
+        "Tableau Public chart; refuses (exit 5) if a small cell carries figures",
+    )
+    export.add_argument(
+        "--state-dir",
+        type=Path,
+        default=None,
+        help="checkpoint and page files; default $PIPELINE_STATE_DIR (absolute, provisioned volume with its marker), else ./state",
+    )
     args = parser.parse_args(argv)
 
     try:
         args.state_dir = resolve_state_dir(args.state_dir)
         with exclusive(args.state_dir):
             return _dispatch(args)
-    except StateDirError as error:
+    except (StateDirError, ExportError) as error:
         print(error, file=sys.stderr)
         return error.exit_code
 
 
 def _dispatch(args: argparse.Namespace) -> int:
+
+    if args.command == "export":
+        conn = warehouse.connect()
+        try:
+            header, rows = warehouse.fetch_aggregate(conn)
+        finally:
+            conn.close()
+        check_small_cells(header, rows)
+        path = args.state_dir / "exports" / "agg_industry_state_year.csv"
+        write_csv(header, rows, path)
+        print(f"rows={len(rows)} path={path}")
+        return 0
 
     if args.command == "load":
         conn = warehouse.connect()
