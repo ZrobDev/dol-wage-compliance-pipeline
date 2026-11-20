@@ -55,6 +55,10 @@ def fetch_page(
             response = client.get(URL, params=params)
         except httpx.HTTPError:
             raise _error("WHD API transport error", api_key) from None
+        # 204 No Content: the filter matched nothing, e.g. no load_dt past the watermark in a
+        # quiet week. It is an empty page, not an error (whd_weekly failed on it 2026-11-19).
+        if response.status_code == 204:
+            return []
         if response.status_code == 200:
             try:
                 data = response.json()["data"]
