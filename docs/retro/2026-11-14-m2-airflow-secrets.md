@@ -24,7 +24,7 @@
 
 ## Owed
 - [x] owner: create the homelab CT with `/srv/whd-state` mounted and marked, per `infra/airflow/README.md` "Host setup (once)" — done 2026-11-14 in the homelab repo (its 2026-11-14 retro); compose deploy at `a340319` on 2026-11-15, verify block all `ok` (recorded in "Host setup (once)" by #17)
-- [x] owner: keep `whd_weekly` paused until the first run's cost is read off the `WHD_MONTHLY` resource monitor (`infra/airflow/README.md`, Deploy) — done 2026-11-20: first full run 0.11 credits from `WAREHOUSE_METERING_HISTORY` (#24), DAG unpaused
+- [x] owner: keep `whd_weekly` paused until the first run's cost is read off the `WHD_MONTHLY` resource monitor (`infra/airflow/README.md`, Deploy) — done 2026-11-20: first full run 0.11 credits from `WAREHOUSE_METERING_HISTORY` (#24)
 
 ## Verification loop
 ```bash
