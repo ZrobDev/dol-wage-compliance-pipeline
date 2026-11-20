@@ -21,9 +21,10 @@ EXPECTED = {
     "airflow_api_secret_key": {"airflow-apiserver"},
     "dol_api_key": {"airflow-scheduler"},
     "snowflake_private_key": {"airflow-scheduler"},
+    "whd_ping_base": {"airflow-scheduler"},
 }
 
-PIPELINE_ONLY = ("dol_api_key", "snowflake_private_key")
+PIPELINE_ONLY = ("dol_api_key", "snowflake_private_key", "whd_ping_base")
 
 
 def check(text: str) -> list[str]:
@@ -87,6 +88,7 @@ def test_compose_file_passes_the_secrets_guard():
             "DOL_API_KEY appears outside",
         ),
         ("      - dol_api_key\n", "", "not granted secret dol_api_key"),
+        ("      - whd_ping_base\n", "", "not granted secret whd_ping_base"),
         (
             "  secrets: &airflow-secrets\n    - postgres_password\n",
             "  secrets: &airflow-secrets\n    - postgres_password\n    - snowflake_private_key\n",

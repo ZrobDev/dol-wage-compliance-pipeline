@@ -101,6 +101,7 @@ services:
       - airflow_api_secret_key
       - dol_api_key
       - snowflake_private_key
+      - whd_ping_base
     volumes:
       - logs:/opt/airflow/logs
       # The durable state dir (ADR 0004). create_host_path: false asks Docker to refuse a missing
@@ -136,6 +137,9 @@ secrets:
     environment: DOL_API_KEY
   snowflake_private_key:
     environment: SNOWFLAKE_PRIVATE_KEY
+  # healthchecks.io ping base, https://hc-ping.com/<ping-key>: it lets anyone ping these checks.
+  whd_ping_base:
+    environment: WHD_PING_BASE
 
 volumes:
   pgdata: {}
