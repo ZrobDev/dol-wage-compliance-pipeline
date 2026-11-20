@@ -25,6 +25,7 @@ Every secret is a Compose secret at `/run/secrets/<name>`, sourced from an env v
 | `airflow_api_secret_key` | `AIRFLOW_API_SECRET_KEY` | `openssl rand -hex 32` |
 | `dol_api_key` | `DOL_API_KEY` | already in Doppler |
 | `snowflake_private_key` | `SNOWFLAKE_PRIVATE_KEY` | already in Doppler (PKCS#8 PEM; dbt reads it with `private_key_path`) |
+| `whd_ping_base` | `WHD_PING_BASE` | `https://hc-ping.com/<ping-key>` from the healthchecks.io project ([Alerts](#alerts)). It is the only thing needed to ping the checks, so treat it as a secret |
 
 Generated values go straight from `openssl` into Doppler over stdin and are never printed, for example `openssl rand -hex 32 | doppler secrets set AIRFLOW_JWT_SECRET -p data-projects -c prd`.
 
@@ -69,11 +70,16 @@ The container itself is created by the homelab repo's own scripts. This repo ass
 ## Deploy
 
 ```bash
-cd infra/airflow
-doppler run -p data-projects -c prd -- docker compose build
-doppler run -p data-projects -c prd -- docker compose up -d
-docker compose ps                                                      # every service healthy; airflow-init exited 0
+ssh whd-airflow /opt/dol-wage-compliance-pipeline/infra/airflow/deploy.sh   # ends "deploy: ok <sha>"
 ```
+
+`deploy.sh` refuses when the checkout has local changes under any path the image is built from, or when a `whd_weekly` run is in progress. Restarting the scheduler mid-run would kill ingest. It then:
+1. fast-forwards to `origin/main`;
+2. builds with `--build-arg REVISION=<sha>`. A bare `docker compose build` fails, because the drift task needs the revision;
+3. runs `up -d`;
+4. checks that the scheduler's image label equals the sha, that `whd_ping_base` is mounted, and that no DAG has import errors.
+
+The first time, the script isn't on the host yet. Run `git fetch origin && git merge --ff-only origin/main` in the checkout first.
 
 The DAG starts **paused**. Unpause it in the UI or with `docker compose exec airflow-scheduler airflow dags unpause whd_weekly`.
 
@@ -100,6 +106,23 @@ Never print `docker compose config` in full; grep it for one key.
 **Cost: estimated, not measured.** Cosmos runs each of the 20 dbt nodes as its own task. Back-to-back tasks keep the warehouse awake inside its 60-second suspend window, so a run should cost a few minutes of XS time (about 0.05 to 0.1 credits).
 - The bound: if every task woke the warehouse separately, a run would be 21 wakes × 60 s ≈ 0.35 credits, about 1.5 credits a month against the 2-credit cap.
 - Read the first real run off the `WHD_MONTHLY` resource monitor before leaving the DAG unpaused.
+
+## Alerts
+
+Two healthchecks.io checks. They sit outside the homelab, so a dead host or a paused DAG still alerts: a check that hears nothing goes late on its own.
+
+| Check (slug) | Schedule (UTC) | Grace | Pinged by |
+|---|---|---|---|
+| `whd-weekly` | cron `0 6 * * 1` | 4 h | `ping_ok` after dbt (body: the ingest summary, or "no new rows"); `ping_fail` (`/fail`) when ingest or dbt fails |
+| `whd-drift` | cron `0 6 * * 1` | 1 h | `drift`: `/fail` when `src/`, `dbt/`, `airflow/`, the lockfiles, the Dockerfile, the Airflow pins or `compose.yaml` changed on `main` since the running image's revision. A docs-only commit is not drift |
+
+Setup, once:
+1. Create a healthchecks.io project with the two checks above. Use slugs, not UUIDs. Connect Slack #vps-ops or email.
+2. Copy the project's ping key.
+3. Store `https://hc-ping.com/<ping-key>` as `WHD_PING_BASE` in Doppler `data-projects/prd` over stdin, never printed, and compare sha256s:
+   `read -rs v && printf %s "$v" | doppler secrets set WHD_PING_BASE -p data-projects -c prd --no-interactive >/dev/null; printf %s "$v" | sha256sum; doppler secrets get WHD_PING_BASE -p data-projects -c prd --plain | tr -d '\n' | sha256sum; unset v`
+
+Pings are ordinary tasks, not callbacks: Airflow 3 runs callbacks in the dag-processor, which holds no secrets. A ping that fails fails its task, and the check then goes late.
 
 ## Backfill
 

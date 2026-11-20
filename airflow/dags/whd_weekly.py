@@ -4,12 +4,14 @@ The tasks wrap the M1 commands and do not rewrite them (ADR 0003). The full back
 DAG run: it takes about 6 hours and is started by hand (infra/airflow/README.md).
 """
 
+import os
 from datetime import datetime, timedelta
 
 from airflow.providers.standard.operators.bash import BashOperator
-from airflow.sdk import DAG
+from airflow.sdk import DAG, task
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 from cosmos.constants import LoadMode
+from whd_ping import drift_files, ping
 
 PIPELINE = "/opt/pipeline"
 DBT = f"{PIPELINE}/dbt"
@@ -54,4 +56,28 @@ with DAG(
         default_args={"retries": 1},
     )
 
-    ingest >> dbt
+    # Alerts are plain tasks, not callbacks: Airflow 3 runs callbacks in the dag-processor, which
+    # holds no secrets. These run in the scheduler (LocalExecutor), next to /run/secrets.
+    # A failed ping fails its task; the check then goes late on healthchecks.io and alerts anyway.
+    @task(trigger_rule="none_failed", retries=2)
+    def ping_ok(**context):
+        summary = context["ti"].xcom_pull(task_ids="ingest")
+        ping("whd-weekly", body=summary or "no new rows: ingest and dbt skipped")
+
+    @task(trigger_rule="one_failed", retries=2)
+    def ping_fail(**context):
+        ping("whd-weekly", "/fail", body=f"run {context['run_id']} failed; read the task logs")
+
+    @task(retries=2)
+    def drift():
+        revision = os.environ.get("PIPELINE_REVISION", "")
+        files = drift_files(revision)
+        if files:
+            changed = "\n".join(files)
+            ping("whd-drift", "/fail", body=f"host runs {revision[:7]}; main changed:\n{changed}")
+        else:
+            ping("whd-drift", body=f"host runs {revision[:7]}; no image path changed on main")
+
+    ingest >> dbt >> ping_ok()
+    [ingest, dbt] >> ping_fail()
+    drift()

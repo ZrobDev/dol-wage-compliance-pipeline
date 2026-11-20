@@ -34,3 +34,10 @@ RUN SNOWFLAKE_ACCOUNT=build-placeholder SNOWFLAKE_USER=build-placeholder \
 
 COPY --chown=airflow:0 airflow/dags/ /opt/airflow/dags/
 WORKDIR /opt/airflow
+
+# The commit this image was built from, read by the drift task and checked by deploy.sh. Last, so
+# a new revision rebuilds no other layer. deploy.sh passes it; a bare `docker compose build` fails.
+ARG REVISION
+RUN test -n "$REVISION" || { echo "build with --build-arg REVISION=<git sha> (deploy.sh does)" >&2; exit 1; }
+LABEL org.opencontainers.image.revision=$REVISION
+ENV PIPELINE_REVISION=$REVISION
