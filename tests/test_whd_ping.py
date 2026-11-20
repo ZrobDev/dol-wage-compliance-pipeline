@@ -60,6 +60,8 @@ def test_ping_failure_hides_the_url(failure):
         ping("whd-weekly", base=BASE, opener=opener)
     assert "PINGKEY" not in str(caught.value)
     assert caught.value.__cause__ is None and caught.value.__suppress_context__
+    if isinstance(failure, urllib.error.HTTPError):
+        assert str(caught.value) == "ping whd-weekly failed: HTTPError 404"
 
 
 def test_ping_rejects_a_non_200_answer():
