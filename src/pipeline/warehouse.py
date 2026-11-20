@@ -37,6 +37,16 @@ def watermark(conn) -> str | None:
     return row[0] if row else None
 
 
+def fetch_aggregate(conn) -> tuple[list[str], list[tuple]]:
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT * FROM WHD.MARTS.AGG_INDUSTRY_STATE_YEAR "
+            "ORDER BY sector_code, state_code, fiscal_year"
+        )
+        header = [column[0].lower() for column in cursor.description]
+        return header, cursor.fetchall()
+
+
 def load_pages(conn, paths: list[Path], *, force: bool) -> int:
     """PUT the page files to the stage, then COPY them in as few statements as possible.
 
