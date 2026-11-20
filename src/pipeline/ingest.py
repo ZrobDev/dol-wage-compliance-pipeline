@@ -40,19 +40,29 @@ def fetch_page(
     offset: int,
     limit: int,
     since: str | None = None,
+    sort_by: str = "case_id",
+    descending: bool = False,
     sleep: Callable[[float], None] = time.sleep,
     # The API documents no rate limit and sends no Retry-After; its 429 window is longer
     # than 5 minutes, so back off for up to ~50 minutes before giving up (the run resumes).
     max_retries: int = 10,
     base_delay: float = 5.0,
 ) -> list[dict]:
-    params = {"X-API-KEY": api_key, "limit": limit, "offset": offset, "sort_by": "case_id"}
+    params = {"X-API-KEY": api_key, "limit": limit, "offset": offset, "sort_by": sort_by}
+    if descending:
+        params["sort"] = "desc"
     if since is not None:
         params["filter_object"] = json.dumps({"field": "load_dt", "operator": "gt", "value": since})
 
     for attempt in range(max_retries + 1):
         try:
             response = client.get(URL, params=params)
+        except httpx.TransportError:
+            # Retried here, not by the DAG: one retry layer, so a bad week cannot multiply.
+            if attempt < max_retries:
+                sleep(min(base_delay * 2**attempt, 900))
+                continue
+            raise _error("WHD API transport error", api_key) from None
         except httpx.HTTPError:
             raise _error("WHD API transport error", api_key) from None
         # 204 No Content: the filter matched nothing, e.g. no load_dt past the watermark in a
@@ -68,7 +78,10 @@ def fetch_page(
                 raise _error("WHD API returned an invalid response", api_key, 200) from None
             return data
         # 429 is the rate limit; 502-504 are transient gateway errors. 500 is not retried: the
-        # API answers 500 past the end of the data.
+        # API answers 500 past the end of the data, filtered or not.
+        # ponytail: an incremental run whose new rows are an exact multiple of page_size ends
+        # on that 500 and fails (~1 in 1,500 per quarterly DOL load); the failure ping reports
+        # it. A row-count endpoint would fix it; the API offers none (probed 2026-11-20).
         if response.status_code in RETRYABLE and attempt < max_retries:
             sleep(min(base_delay * 2**attempt, 900))
             continue
@@ -77,6 +90,21 @@ def fetch_page(
         ) from None
 
     raise AssertionError("unreachable")
+
+
+def newest_load_dt(client: httpx.Client, *, api_key: str, **kwargs) -> str:
+    """The API's newest load_dt, read without the incremental filter.
+
+    A filtered fetch that comes back empty while this is past the watermark means the filter is
+    broken, not that the week was quiet.
+    """
+    data = fetch_page(
+        client, api_key=api_key, offset=0, limit=1, sort_by="load_dt", descending=True, **kwargs
+    )
+    value = data[0].get("load_dt") if data and isinstance(data[0], dict) else None
+    if not isinstance(value, str) or not value:
+        raise _error("WHD API returned no load_dt for its newest record", api_key)
+    return value
 
 
 def _tag(since: str | None) -> str:
@@ -127,9 +155,12 @@ def run(
     checkpoint = state_dir / "whd_checkpoint.json"
     pages_dir = state_dir / "pages"
     offset = 0
-    if checkpoint.exists():
+    # Only a full backfill resumes at its offset. An incremental offset counts rows in a result
+    # set that shifts as DOL updates cases, so resuming could skip an updated case for good (the
+    # watermark then moves past it). Restarting costs a few pages; staging dedups by case_id.
+    if checkpoint.exists() and since is None:
         saved = json.loads(checkpoint.read_text())
-        if saved.get("since") == since:
+        if saved.get("since") is None:
             offset = saved["offset"]
             # A durable checkpoint can outlive the data it points into: an incremental run's
             # offset counts rows past `since`, and that result set shifts as new rows arrive.
