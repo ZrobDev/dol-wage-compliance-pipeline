@@ -59,16 +59,20 @@ with DAG(
     # Alerts are plain tasks, not callbacks: Airflow 3 runs callbacks in the dag-processor, which
     # holds no secrets. These run in the scheduler (LocalExecutor), next to /run/secrets.
     # A failed ping fails its task; the check then goes late on healthchecks.io and alerts anyway.
-    @task(trigger_rule="none_failed", retries=2)
+    # Their own short retry delay: the DAG's 20 min suits a killed ingest, not a ping that failed
+    # on a network blip (it held a manual `dags test` for 20 min per attempt on 2026-11-20).
+    PING_RETRY = {"retries": 2, "retry_delay": timedelta(minutes=1)}
+
+    @task(trigger_rule="none_failed", **PING_RETRY)
     def ping_ok(**context):
         summary = context["ti"].xcom_pull(task_ids="ingest")
         ping("whd-weekly", body=summary or "no new rows: ingest and dbt skipped")
 
-    @task(trigger_rule="one_failed", retries=2)
+    @task(trigger_rule="one_failed", **PING_RETRY)
     def ping_fail(**context):
         ping("whd-weekly", "/fail", body=f"run {context['run_id']} failed; read the task logs")
 
-    @task(retries=2)
+    @task(**PING_RETRY)
     def drift():
         revision = os.environ.get("PIPELINE_REVISION", "")
         files = drift_files(revision)
