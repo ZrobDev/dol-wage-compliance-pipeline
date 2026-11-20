@@ -110,6 +110,30 @@ def test_run_sends_incremental_filter(tmp_path):
     }
 
 
+def test_run_treats_204_as_no_new_rows(tmp_path):
+    # The API answers 204 when no row has load_dt past the watermark.
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(204)
+
+    (tmp_path / "whd_checkpoint.json").write_text('{"offset": 0, "since": "2026-01-16T13:04:16"}')
+    with client(handler) as http:
+        result = run(
+            http,
+            api_key=KEY,
+            state_dir=tmp_path,
+            since="2026-01-16T13:04:16",
+            load_page=loader,
+            page_pause=0,
+        )
+    assert result == (0, 0, 0)
+    assert len(calls) == 1
+    assert not (tmp_path / "whd_checkpoint.json").exists()
+    assert not (tmp_path / "pages").exists()
+
+
 def test_run_writes_deterministic_pages_and_clears_checkpoint(tmp_path):
     responses = [rows(0, 2), rows(2, 1)]
 
