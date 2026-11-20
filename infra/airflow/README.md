@@ -97,9 +97,18 @@ Never print `docker compose config` in full; grep it for one key.
 
 **First deploy only.** Before the marker is written, confirm that Docker Engine refuses a missing bind source: stop the stack, point the mount at a path that does not exist, and check that `docker compose up -d airflow-scheduler` fails and creates nothing. The laptop smoke test ran on Podman, which creates the path anyway. If Docker does too, the marker check is the only guard, and it still holds.
 
-**Cost: estimated, not measured.** Cosmos runs each of the 20 dbt nodes as its own task. Back-to-back tasks keep the warehouse awake inside its 60-second suspend window, so a run should cost a few minutes of XS time (about 0.05 to 0.1 credits).
+**Cost: measured once.** The first full run (2026-11-20 02:12–02:28 UTC, CT 121 at `d7446b2`: ingest plus all 20 dbt nodes) used **0.11 credits**, read from `WAREHOUSE_METERING_HISTORY` for `WHD_WH`. The figure is one hourly bucket, so it may include a minute of an ad-hoc Snowsight query at the bucket's edge. Cosmos runs each dbt node as its own task, and back-to-back tasks keep the warehouse awake inside its 60-second suspend window.
 - The bound: if every task woke the warehouse separately, a run would be 21 wakes × 60 s ≈ 0.35 credits, about 1.5 credits a month against the 2-credit cap.
-- Read the first real run off the `WHD_MONTHLY` resource monitor before leaving the DAG unpaused.
+- Since #20 a quiet week exits ingest with 99 and skips every dbt task, so most weeks should cost close to nothing; a week with new DOL rows should cost about the measured 0.11 plus its COPY. Neither case is measured yet: CT 121 still runs `d7446b2`, which predates #20.
+- To read a run's cost, run this in Snowsight (Snowsight shows times in the session time zone):
+
+  ```sql
+  SELECT start_time, end_time, credits_used
+  FROM TABLE(WHD.INFORMATION_SCHEMA.WAREHOUSE_METERING_HISTORY(
+    DATEADD('hour', -12, CURRENT_TIMESTAMP()), CURRENT_TIMESTAMP(), 'WHD_WH'))
+  ORDER BY start_time;
+  ```
+  `SHOW RESOURCE MONITORS LIKE 'WHD_MONTHLY'` gives the month's total, not one run's, and it lags.
 
 ## Backfill
 
