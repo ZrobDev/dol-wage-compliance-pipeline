@@ -30,7 +30,7 @@ Checked during the session (CT 121 SSH needed a Tailscale re-auth at retro time;
 ## Owed
 - [ ] operator: unpause `whd_weekly` when ready (`airflow dags unpause whd_weekly` in the scheduler) — first scheduled run; healthchecks.io alerts if it fails or never reports
 - [ ] operator, optional: delete and recreate both healthchecks.io checks with the same slugs, schedule and grace — retires the UUID ping URLs exposed in a screenshot on 2026-11-20
-- [ ] agent: `infra/airflow/README.md:73` names the operator's SSH alias in a public repo (added in #21); use `ssh <host>` as line 55 does — the identity gate flagged the same alias in this retro
+- [x] agent: `infra/airflow/README.md:73` names the operator's SSH alias in a public repo (added in #21); use `ssh <host>` as line 55 does — the identity gate flagged the same alias in this retro — done in the retro-apply PR, also `deploy.sh:4`
 - [ ] operator: delete the merged remote branches `feat/healthchecks-drift-deploy` (#21) and `feat/m2-durable-state` (#16) — not named in the cleanup request, so left in place; auto-delete is now on for future merges
 
 ## Verification loop
@@ -49,7 +49,7 @@ gh repo view --json deleteBranchOnMerge --jq .deleteBranchOnMerge               
 | #21 merged but never reached `main` | GitHub stacked PR base `fix/ingest-hardening` | `deleteBranchOnMerge=false`, so merging #20 left the base in place and #21 was never retargeted | `gh repo view --json deleteBranchOnMerge --jq .deleteBranchOnMerge` → `true` |
 | `deploy.sh` stopped after `up -d` with no message | `infra/airflow/deploy.sh`, import-errors check | stderr went to `/dev/null`; `set -e` exited quietly inside `main()`, and an ERR trap needs `-E` to fire in functions | `grep -c 'set -Eeuo pipefail' infra/airflow/deploy.sh` → 1 |
 | A manual `dags test` hung 20 min per ping attempt | `airflow/dags/whd_weekly.py` ping tasks | They inherited the DAG's `retry_delay=20 min`, which is meant for a killed ingest | `grep -c 'PING_RETRY' airflow/dags/whd_weekly.py` → 4 |
-| Pings failed as a bare `HTTPError`; the cause took two operator round trips | `WHD_PING_BASE` held a check UUID, then the checks had no slugs (404) | The secret's shape and the slugs weren't checked before the first deploy that needed them; the error hid the status | Probe from the scheduler: `curl -sS -w ' %{http_code}' "$(cat /run/secrets/whd_ping_base)/whd-weekly"` → `OK 200`; API: every check has a non-empty `slug` |
+| Pings failed as a bare `HTTPError`; the cause took two operator round trips | `WHD_PING_BASE` held a check UUID, then the checks had no slugs (404) | The secret's shape and the slugs weren't checked before the first deploy that needed them; the error hid the status | API: `curl -sS -H "X-Api-Key: $k" https://healthchecks.io/api/v3/checks/ \| jq -r '.checks[] \| "\(.slug) \(.slug\|length)"'` → both checks, length > 0. Before the first deploy only: probe the ping URL from the scheduler (`curl -sS -o /dev/null -w '%{http_code}' "$(cat /run/secrets/whd_ping_base)/whd-weekly"` → `200`) — it sends a real success ping, so never in a routine audit |
 
 ## Process lessons
 - Evidence: failure-mode row 3. Rule: before stacking PR B on A, `gh repo view --json deleteBranchOnMerge` must print `true`; otherwise open B against `main` after A merges, and before each merge `gh pr view <n> --json baseRefName -q .baseRefName` prints `main`. Scope: global-candidate.
@@ -70,15 +70,15 @@ gh repo view --json deleteBranchOnMerge --jq .deleteBranchOnMerge               
 | new | dol-load-cadence.md | DOL loads WHD about quarterly (2–3k rows, gaps up to 26 weeks); most weekly runs fetch nothing. This drives the dbt skip and rules out time-based staleness alerts |
 | new | whd-alerting-healthchecks.md | Checks `whd-weekly`/`whd-drift` work by slug under the project ping key (`WHD_PING_BASE`); verify through the API with `HC_API_KEY_RO` from Doppler; a check without a slug answers 404 |
 
-Status: pending
+Status: applied 2026-11-20
 
 ## Skill feedback
 none
 
-Status: pending
+Status: applied 2026-11-20
 
 ## Graduation candidates
-- Before stacking a PR, `gh repo view --json deleteBranchOnMerge` prints `true`, else open the child against `main` after the parent merges — test: 3 projects (entity-status-letter-ca 2026-10-30 #5–#7, omarchy-workstation-setup 2026-11-02 #84, dol-wage-compliance-pipeline 2026-11-20 #21) → pass
+- Before stacking a PR, `gh repo view --json deleteBranchOnMerge` prints `true`, else open the child against `main` after the parent merges — test: 3 projects (entity-status-letter-ca 2026-10-30 #5–#7, omarchy-workstation-setup 2026-11-02 #84, dol-wage-compliance-pipeline 2026-11-20 #21) → pass — graduated 2026-11-20
 - A shell guard that can exit non-zero gets `set -E` plus an ERR trap naming the command — test: 1 project (no prior retro or memory names a silent `set -e` exit in a function) → fails test
 
 ## Next session
