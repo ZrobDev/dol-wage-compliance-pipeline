@@ -53,8 +53,11 @@ def ping(
         with opener(request, timeout=10) as response:
             status = response.status
     except (OSError, ValueError) as error:  # URLError, HTTPError and timeouts are OSErrors
-        # The exception text can carry the URL, and the URL carries the ping key.
-        raise RuntimeError(f"ping {slug}{suffix} failed: {type(error).__name__}") from None
+        # The exception text can carry the URL, and the URL carries the ping key. The status code
+        # is safe and says what went wrong (404: no check has this slug under this ping key).
+        code = getattr(error, "code", None)
+        status = f" {code}" if isinstance(code, int) else ""
+        raise RuntimeError(f"ping {slug}{suffix} failed: {type(error).__name__}{status}") from None
     if status != 200:
         raise RuntimeError(f"ping {slug}{suffix} answered HTTP {status}")
 
