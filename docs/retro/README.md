@@ -3,6 +3,7 @@
 One file per session, newest first, written by the `retro` skill and committed by the operator. Each retro carries its own verification loop and owed actions; read the newest one first.
 
 ## Index
+- 2026-11-20 [whd-weekly-hardening](2026-11-20-whd-weekly-hardening.md) — main, a340319..3a93b0b (#19–#27) — a 204 fix made a broken filter look like a quiet week; a canary closes it
 - 2026-11-14 [m2-airflow-secrets](2026-11-14-m2-airflow-secrets.md) — main, 0aa8d91..a340319 — `--plain | wc -c` reads one byte over the stored length; use the JSON length
 - 2026-11-13 [m1-close-out](2026-11-13-m1-close-out.md) — main, 39f1f70..0aa8d91 — a graduated rule that still bit (push to a merged PR) needs enforcement, not restating
 - 2026-11-13 [m1-thin-slice](2026-11-13-m1-thin-slice.md) — main + #9/#10, 4f16163..39f1f70 — one COPY per page burned half the monthly credits; backfills load in one pass
