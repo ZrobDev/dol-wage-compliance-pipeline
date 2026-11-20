@@ -99,7 +99,7 @@ Never print `docker compose config` in full; grep it for one key.
 
 **Cost: measured once.** The first full run (2026-11-20 02:12–02:28 UTC, CT 121 at `d7446b2`: ingest plus all 20 dbt nodes) used **0.11 credits**, read from `WAREHOUSE_METERING_HISTORY` for `WHD_WH`. The figure is one hourly bucket, so it may include a minute of an ad-hoc Snowsight query at the bucket's edge. Cosmos runs each dbt node as its own task, and back-to-back tasks keep the warehouse awake inside its 60-second suspend window.
 - The bound: if every task woke the warehouse separately, a run would be 21 wakes × 60 s ≈ 0.35 credits, about 1.5 credits a month against the 2-credit cap.
-- Since #20 a quiet week exits ingest with 99 and skips every dbt task, so most weeks should cost at most one 60-second wake for the watermark query (about 0.02 credits); a week with new DOL rows should cost about the measured 0.11. Neither case is measured yet: CT 121 still runs `d7446b2`, which predates #20.
+- Since #20 a quiet week exits ingest with 99 and skips every dbt task, so most weeks should cost at most one 60-second wake for the watermark query (about 0.02 credits); a week with new DOL rows should cost the same order as the measured 0.11. Neither case is measured yet: CT 121 still runs `d7446b2`, which predates #20.
 - To read a run's cost, run this in Snowsight as ACCOUNTADMIN; `WHD_PIPELINE` has no `MONITOR` on `WHD_WH` and sees no rows. Snowsight shows times in the session time zone:
 
   ```sql
