@@ -6,7 +6,7 @@ import traceback
 import httpx
 import pytest
 
-from pipeline.ingest import IngestError, fetch_page, resolve_since, run
+from pipeline.ingest import IngestError, fetch_page, newest_load_dt, resolve_since, run
 
 KEY = "TESTKEY-not-real-123"
 
@@ -230,8 +230,9 @@ def test_fetch_page_redacts_key_everywhere(caplog, kind):
             raise httpx.ConnectError(f"failed {request.url}", request=request)
         return httpx.Response(403, text=f"denied {KEY}", request=request)
 
+    # Transport errors now retry before raising; the stub keeps the test from sleeping.
     with client(handler) as http, pytest.raises(IngestError) as caught:
-        fetch_page(http, api_key=KEY, offset=0, limit=1)
+        fetch_page(http, api_key=KEY, offset=0, limit=1, sleep=lambda _: None)
     error = caught.value
     formatted = "".join(traceback.format_exception(error))
     assert KEY not in str(error)
@@ -257,3 +258,64 @@ def test_resolve_since_finishes_an_interrupted_run_before_going_incremental(tmp_
         '{"offset": 6000, "since": "2026-01-01T00:00:00"}'
     )
     assert resolve_since(tmp_path, full=True, watermark=watermark) is None
+
+
+def test_fetch_page_retries_transport_errors_then_raises_redacted():
+    sleeps = []
+    outcomes = ["fail", "fail", "ok"]
+
+    def handler(request):
+        if outcomes.pop(0) == "fail":
+            raise httpx.ConnectError(f"failed {request.url}", request=request)
+        return httpx.Response(200, json={"data": rows(0, 1)})
+
+    with client(handler) as http:
+        assert fetch_page(http, api_key=KEY, offset=0, limit=1, sleep=sleeps.append) == rows(0, 1)
+    assert sleeps == [5.0, 10.0]
+
+    def always(request):
+        raise httpx.ConnectError(f"failed {request.url}", request=request)
+
+    sleeps.clear()
+    with client(always) as http, pytest.raises(IngestError) as caught:
+        fetch_page(http, api_key=KEY, offset=0, limit=1, sleep=sleeps.append, max_retries=2)
+    assert sleeps == [5.0, 10.0]
+    assert KEY not in str(caught.value)
+
+
+def test_incremental_run_restarts_at_zero_despite_a_matching_checkpoint(tmp_path):
+    # The incremental result set shifts as DOL updates cases; resuming at a stale offset could
+    # skip an updated case for good.
+    since = "2026-01-16T13:04:16"
+    (tmp_path / "whd_checkpoint.json").write_text(json.dumps({"offset": 3000, "since": since}))
+    offsets = []
+
+    def handler(request):
+        offsets.append(int(request.url.params["offset"]))
+        return httpx.Response(204)
+
+    with client(handler) as http:
+        run(http, api_key=KEY, state_dir=tmp_path, since=since, load_page=loader, page_pause=0)
+    assert offsets == [0]
+
+
+def test_newest_load_dt_reads_the_newest_record_unfiltered():
+    seen = {}
+
+    def handler(request):
+        seen.update(request.url.params)
+        return httpx.Response(200, json={"data": [{"load_dt": "2026-11-03T00:18:04"}]})
+
+    with client(handler) as http:
+        assert newest_load_dt(http, api_key=KEY) == "2026-11-03T00:18:04"
+    assert (seen["sort_by"], seen["sort"], seen["limit"]) == ("load_dt", "desc", "1")
+    assert "filter_object" not in seen
+
+
+@pytest.mark.parametrize(
+    "response",
+    [httpx.Response(204), httpx.Response(200, json={"data": [{"case_id": 1}]})],
+)
+def test_newest_load_dt_raises_without_a_load_dt(response):
+    with client(lambda request: response) as http, pytest.raises(IngestError):
+        newest_load_dt(http, api_key=KEY)

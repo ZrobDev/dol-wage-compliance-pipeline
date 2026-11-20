@@ -31,8 +31,14 @@ with DAG(
         task_id="ingest",
         # --defer-load: one COPY at the end, never one per page (AGENTS.md). The state dir comes
         # from PIPELINE_STATE_DIR, never --state-dir: the flag would create a missing mount.
-        bash_command=f"{PIPELINE}/.venv/bin/pipeline ingest --defer-load",
-        # The API allows ~10 requests per 15 min; a week of new records is a few pages.
+        bash_command=f"{PIPELINE}/.venv/bin/pipeline ingest --defer-load --empty-exit-code 99",
+        # A quiet week (DOL loads about quarterly, so most weeks) skips ingest, and with it
+        # every dbt task: rebuilding unchanged models only spends warehouse credits.
+        skip_on_exit_code=99,
+        # One retry layer: fetch_page already retries 429, 502-504 and transport errors for
+        # ~50 min. This retry is for a task that was killed, not for the API.
+        retries=1,
+        # The API allows ~10 requests per 15 min; a quarterly DOL load is two or three pages.
         execution_timeout=timedelta(hours=2),
     )
 
