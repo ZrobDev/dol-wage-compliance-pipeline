@@ -18,9 +18,8 @@ DBT = f"{PIPELINE}/dbt"
 
 with DAG(
     dag_id="whd_weekly",
-    # Weekly, not daily, under the 2-credit monthly cap. Estimate, unmeasured: back-to-back tasks
-    # keep the warehouse awake, so a few minutes of XS time per run; the worst case (every one of
-    # the 21 tasks waking it for 60 s) is ~0.35 credits. Read the first run off the monitor.
+    # Weekly, not daily, under the 2-credit monthly cap. Measured cost and how to read it:
+    # infra/airflow/README.md, Deploy.
     schedule="0 6 * * 1",
     start_date=datetime(2026, 11, 16),
     catchup=False,
